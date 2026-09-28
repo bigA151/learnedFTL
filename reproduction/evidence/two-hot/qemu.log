@@ -1,0 +1,19 @@
+[FEMU] Log: Memory backend is not pinned; latency measurements may include page faults
+total pages: 256
+[FEMU] Log: GC_DONOR phase=before-fio open_lines=1 open_pages=24576 untrained_lines=1 untrained_pages=24576 partial_lines=0 free_lines=126
+[FEMU] Log: vSSD0,Reset statistics!
+Model Training...
+Model Training...
+Model Training...
+Model Training...
+[FEMU] Log: CG_PAIR_GC hot=0 donor=128 free=125
+GC happens?
+GC happens?
+GC happens?
+[FEMU] Log: METRICS access=45326 cmt_hit=45326 cmt_miss=0 model_hit=0 model_use=0 gc=2 writes=137877 read_energy=332657.500 write_energy=2302545.900 erase_energy=16896.000
+[FEMU] Log: GC_DONOR phase=after-fio open_lines=4 open_pages=66923 untrained_lines=1 untrained_pages=14696 partial_lines=2 free_lines=122
+[FEMU] Log: CG_BORROW attempts=13685 success=13682 pages=13682 paired_gc=1 min_donor_free=8192
+[FEMU] Log: PHYS_ID_SUMMARY writes=4295319 copies=45054 reads=45461
+[FEMU] Log: GC_DIAG calls=3 wp=0 trans=0 low=0 none=3 alloc=6 empty=0 empty_with_victim=0 freed=2 user_writes=92823 gc_writes=45054 min_free=123 min_victim=0 end_free=122 end_victim=6 end_full=0
+[FEMU] Log: vSSD0,Statistics print!
+qemu-learnedftl-cross-borrow-greedy: terminating on signal 15 from pid 2246840 (bash)

@@ -27,6 +27,7 @@ static void bb_init(FemuCtrl *n, Error **errp)
 static void reset_stat(struct ssd *ssd)
 {
     memset(&ssd->stat, 0, sizeof(ssd->stat));
+    gc_diag_reset(ssd);
     // struct statistics *st = &ssd->stat;
 
     /*FTL*/
@@ -85,6 +86,7 @@ static void print_stat(struct ssd *ssd)
              st->model_hit_num, st->model_use_num, st->gc_times,
              st->write_num, st->read_joule, st->write_joule,
              st->erase_joule);
+    gc_diag_report(ssd);
     // struct statistics *st = &ssd->stat;
     
     /*ftl*/

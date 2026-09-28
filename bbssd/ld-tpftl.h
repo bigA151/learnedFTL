@@ -449,4 +449,6 @@ void count_segments(struct ssd* ssd);
 #else
 #define ftl_assert(expression)
 #endif
+void gc_diag_reset(struct ssd *ssd);
+void gc_diag_report(struct ssd *ssd);
 #endif

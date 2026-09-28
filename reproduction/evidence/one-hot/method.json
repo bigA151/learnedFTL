@@ -1,0 +1,17 @@
+{
+  "binary": "qemu-learnedftl-cross-borrow-greedy",
+  "warmup_passes": 0,
+  "warmup_pattern": "write",
+  "warmup_bytes": 17213423616,
+  "fio_bs": "4k",
+  "fio_engine": "psync",
+  "fio_pattern": "write",
+  "fio_jobs": 1,
+  "fio_seconds": 10,
+  "fio_filesize_mib": 30518,
+  "offset_increment": "487428k",
+  "fio_returncode": 0,
+  "report_returncode": 0,
+  "guest_image": "images/guest-gc-20260928T133932Z-2116765.qcow2",
+  "post_read": true
+}

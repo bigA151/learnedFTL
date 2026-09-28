@@ -1,0 +1,1001 @@
+[FEMU] Log: Memory backend is not pinned; latency measurements may include page faults
+total pages: 256
+[FEMU] Log: GC_DONOR phase=before-fio open_lines=0 open_pages=0 untrained_lines=0 untrained_pages=0 partial_lines=0 free_lines=255
+[FEMU] Log: vSSD0,Reset statistics!
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+trans wp is doing gc
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+GC happens?
+???
+Model Training...
+[FEMU] Log: METRICS access=256 cmt_hit=197 cmt_miss=29 model_hit=38 model_use=38 gc=265 writes=12647952 read_energy=49219667.000 write_energy=211220798.400 erase_energy=2238720.000
+[FEMU] Log: GC_DONOR phase=after-fio open_lines=239 open_pages=3867120 untrained_lines=182 untrained_pages=3632777 partial_lines=1 free_lines=16
+[FEMU] Log: CG_BORROW attempts=265 success=0 pages=0 paired_gc=0 min_donor_free=8192
+[FEMU] Log: PHYS_ID_SUMMARY writes=5447665 copies=7200287 reads=256
+[FEMU] Log: GC_DIAG calls=340 wp=0 trans=0 low=340 none=0 alloc=564 empty=0 empty_with_victim=0 freed=325 user_writes=5447665 gc_writes=7200287 min_free=16 min_victim=0 end_free=16 end_victim=0 end_full=0
+[FEMU] Log: vSSD0,Statistics print!
+qemu-learnedftl-cross-borrow-greedy: terminating on signal 15 from pid 2175933 (bash)

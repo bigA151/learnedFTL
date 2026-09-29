@@ -1,6 +1,8 @@
 # LearnedFTL（HPCA 2024）复现：实习生操作手册
 
-> **2026-09-29 写入修复计划：** [详细实施与验收计划](WRITE_REPAIR_EXECUTION_PLAN_2026-09-29.zh-CN.md) 已制定，新增算法/脚本尚未实施。按阶段通过条件推进；旧 `complete` 状态不能代表新机制已通过。
+> **2026-09-29 地址配置更正（覆盖本手册下方的旧 `filesize=30518m` 操作建议）：** fio 官方文档和客机只读地址日志证明，全局 `filesize=30518m` 会覆盖 `size` 的每任务区域边界；仅删除它又会让并发任务重复读单页。正式脚本现为 64 个任务分别写出 `offset` 与 `filesize=offset+476 MiB`，保存任务文件及哈希。旧 18 项成功退出的数据现在均标为**未完成**，需要从新虚拟机重做，不能入图。具体证据和验收见 [fio 地址范围核验](FIO_ADDRESS_LAYOUT_2026-09-29.zh-CN.md)。
+
+> **2026-09-29 写入修复计划：** [详细实施与验收计划](WRITE_REPAIR_EXECUTION_PLAN_2026-09-29.zh-CN.md) 已制定，部分诊断机制和脚本已实施，但顺序写仍未解决。按阶段通过条件推进；旧 `complete` 状态不能代表新机制已通过。
 
 > **本机只从 `/home/zheng/FEMU-ext4` 运行实验。旧 NTFS 目录保持只读。** 从本仓库根目录执行命令。先读「安全边界」和「正常／异常」。本手册以 **图 14 的五种 FTL、四种 FIO 负载**为可执行主线；其余图的现状和缺口列在末尾。**已有诊断图不是论文复现图；图 14 的写测试初始状态在论文中没有写明，当前六轮写预热属于额外实验选择。**
 
@@ -18,10 +20,11 @@
 | --- | --- |
 | `reproduction/run_paper_fig14.sh` | 图 14 全流程：启动 FEMU、预热、测量、检查 |
 | `reproduction/build_paper.py` | 按论文参数编译五种 FTL 的专用 FEMU |
-| `reproduction/run_fio.py` | 单次 FIO 与 FEMU 计数器采集；由主脚本调用 |
+| `reproduction/run_fio.py` | 单次 FIO、64 任务显式地址范围与 FEMU 计数器采集；由主脚本调用 |
 | `reproduction/plot_fig14.py` | 从实际 CSV 画图，严格模式会拒绝不完整数据 |
 | `reproduction/download_traces.sh`、`trace_to_fio.py`、`run_trace.py` | 公开 trace 下载、转换和单条回放 |
 | `reproduction/results/` | 原始 FIO JSON、计数器、状态与图；**不要手改** |
+| `reproduction/FIO_ADDRESS_LAYOUT_2026-09-29.zh-CN.md` | fio 地址范围修正的证据、旧数据作废原因与新任务文件验收 |
 | `reproduction/README.md` | 技术背景和早期诊断记录，主操作以本手册为准 |
 
 在仓库根目录核查：
@@ -124,7 +127,7 @@ bash reproduction/run_read_diag.sh
 | 每轮 `lun_usage.csv` | 64 个 `(ch,lun)` 的**全部有效数据读**次数和累计模拟等待时间；这是判断请求是否集中到少数单元的主证据。等待时间是模拟读延迟超过基础 40 µs 的部分。 |
 | 每轮 `summary.csv`、`histogram.csv`、`top20.csv`、`bottom20.csv` | 按 LPN 统计 CMT 命中、模型尝试、模型命中、bitmap 过滤后实际读取翻译页、模型预测失败后实际读取翻译页，以及模型不可用后读取翻译页。这些计数先保存在内存中，每轮结束一次性输出；只有前 100 条地址也在结束时统一写出。bitmap 过滤意味着跳过模型预测，**仍会读取翻译页**，不能解释成省掉了一次 NAND 读。直方图的 `uses=N,lpns=M` 表示有 M 个 LPN 各被使用 N 次；`zero_lpns` 包括未访问的 LPN；`min_positive` 是**至少用过一次的最少次数**。Top/Bottom 列出对应的 LPN 和次数，不是缓存物理槽位编号。 |
 | 每轮 `diagnostic.log`、`report.err`、`reset.err` | 原始诊断日志与管理命令错误。需有 `READ_DIAG_BEGIN`、100 行地址、64 行 LUN、六个统计摘要、`READ_DIAG_END`，且日志能解析成 CSV。 |
-| `comparison.csv`、`method.json` | 前者并列展示各轮速度、最热 LUN 占比及 CMT/模型分类；后者只在所有轮次和日志成功时写 `status: complete`，记录 `fio_filesize_mib=30518` 等参数。 |
+| `comparison.csv`、`method.json` | 前者并列展示各轮速度、最热 LUN 占比及 CMT/模型分类；后者只在所有轮次和日志成功时写 `status: complete`，并记录任务文件地址布局版本。 |
 
 **异常处理：**构建失败先看 `reproduction/bin/build-learnedftl-read-diag.log`；启动失败看输出目录的 `qemu.log`、`guest-serial.log`；预热失败看 `warmup.err`、`warmup.json`；缺少 100 行地址、64 行 LUN 或 `READ_DIAG_END` 时该轮不合格，保留完整日志后重跑脚本。脚本为每次运行创建不同的客体盘和目录，不会把前次日志覆盖。上述计数仅覆盖每轮 fio 测量，预热和管理命令不会混入；不同轮次会清零。详细机制见 [`SEQ_READ_ALIGNMENT_EXPLAINED.zh-CN.md`](SEQ_READ_ALIGNMENT_EXPLAINED.zh-CN.md)。
 
@@ -148,13 +151,13 @@ bash reproduction/verify_fio_address_range.sh
 | 在 NTFS 上运行 QEMU | 2026-09-25 主机内核报告：`iomap_write_end → ntfs_file_write_iter → vfs_write` 触发 `kernel BUG`。现场是 QEMU 的 `write(fd=2, 71 字节)`，更像重定向后的标准错误日志；**不能声称那一笔写的必然是 qcow2**。以前同分区上也出现 qcow2 `fallocate(0x10) is not supported` 告警。 | 只在 `/home/zheng/FEMU-ext4` 运行；`findmnt -T "$PWD"` 必须显示 ext4；原 NTFS 保持只读。正式与诊断脚本已拒绝 `ntfs3/ntfs/fuseblk`。详见 [`NTFS_CRASH_2026-09-25.zh-CN.md`](NTFS_CRASH_2026-09-25.zh-CN.md)。 |
 | 把崩溃中断的结果或可解析镜像当作成功 | `qemu-img check` 只能证明镜像容器结构可解析，不能证明最后一次写入数据完整；fio JSON 可能在中断时只写了一部分。 | 检查 `method.json: status=complete`、预热字节、每轮 `error=0`、运行时长和脚本版本。中断项从新 VM 与预热重跑。 |
 | 只看吞吐量、IOPS 或 `fio error=0` | 旧 fio 请求可以成功、数值也稳定，但实际地址反复命中单页；吞吐、IOPS 的异常不能直接归咎于 FTL，更不能据此判断论文有造假。 | 先保存原始 fio JSON 与 `write_iolog`，核对请求地址分布、预热、二进制和计数器，再做性能归因。修正后的短测旧间隔约 1321 MiB/s、错开间隔约 1332–1368 MiB/s；完整正式结果仍待重跑。 |
-| fio 未指定整体设备 `filesize` | 旧命令同时用了 `size=476m`、`offset_increment`、64 作业和 `time_based`，却没有 `filesize`。fio 3.16 自身的地址日志中，2 作业 1 秒共 1,999 次读只有 1,001 个不同地址，一个 4 KiB 地址重复 999 次；增加 `filesize=30518m` 后，同样 1,999 次读对应 1,999 个地址。64 作业的限速抽样中，修复后的 6,464 次读也全部不同。**旧图的“顺序读”并非预期的大范围顺序扫盘。** | 新脚本必须给出 `--filesize=30518m`。核对原始 fio JSON 的 `job options.filesize`，并用 fio `write_iolog` 或诊断的 `first100.csv` 检查地址推进。任何旧的 16 组图 14 结果都要重跑。 |
-| 仅把相邻作业起点错开 4 KiB | 旧命令下，`476m → 487428k` 曾把 LearnedFTL 从约 184 MiB/s 提高到约 1,578 MiB/s；但当时大多数作业仍反复读各自的一个块。提高的数值证明热点被分散，**不证明论文的顺序读已复现**。 | 保留旧间隔与错开间隔作为诊断对照，但两组都必须同时带 `filesize=30518m`，再看真实的 LUN 分布、地址序列和吞吐量。旧的“只需错开”解释已撤回。 |
+| fio 未指定整体设备 `filesize` | 旧命令同时用了 `size=476m`、`offset_increment`、64 作业和 `time_based`，却没有 `filesize`。fio 3.16 自身的地址日志中，2 作业 1 秒共 1,999 次读只有 1,001 个不同地址，一个 4 KiB 地址重复 999 次；增加 `filesize=30518m` 后，同样 1,999 次读对应 1,999 个地址。64 作业的限速抽样中，修复后的 6,464 次读也全部不同。**旧图的“顺序读”并非预期的大范围顺序扫盘。** | **此句是 2026-09-25 的旧建议，已被 2026-09-29 更正取代。** 新脚本必须按任务单独给出 `offset` 与 `filesize=offset+范围`。核对原始 fio JSON 的 `job options.filesize`，并用 fio `write_iolog` 或诊断的 `first100.csv` 检查地址推进。任何旧的 16 组图 14 结果都要重跑。 |
+| 仅把相邻作业起点错开 4 KiB | 旧命令下，`476m → 487428k` 曾把 LearnedFTL 从约 184 MiB/s 提高到约 1,578 MiB/s；但当时大多数作业仍反复读各自的一个块。提高的数值证明热点被分散，**不证明论文的顺序读已复现**。 | 保留旧间隔与错开间隔作为历史诊断对照；正式重跑必须使用各任务独立终点，再看真实的 LUN 分布、地址序列和吞吐量。旧的“只需错开”解释已撤回。 |
 | 只看最先 100 条物理地址 | 作业启动时间不同，最早 100 条可偏向少数线程；旧实验中其中大量落在 `(ch=0,lun=0)`，但只有全量计数才能定量。 | 同时查看 `first100.csv` 和 `lun_usage.csv`；后者覆盖整轮全部有效数据读，并记录每个 LUN 的模拟排队等待时间。 |
 | 把 bitmap 过滤当作省掉翻译页读取 | 发布代码中 `bitmap=0` 会跳过模型预测，之后仍走 `process_translation_page_read()`；模型预测失败也会走这条路径。模型训练标记、模型尝试、模型正确命中不是一个计数。 | 每轮分开看 `model_hit`、`bitmap_filtered_translation`、`model_miss_translation`，另看 `model_unavailable_translation` 和 `model_attempt`。日志仅在读测量期间计数，结束时统一导出 CSV。 |
 | LeaFTL 四组预热在首次 GC 崩溃 | GDB 在 GC 擦除分支抓到 `fprintf(gc_fp, ...)` 的 `gc_fp=NULL`；作者把日志写到本机不存在的 `/home/lzh/femu/log/gc_frequency.txt`。四次主机日志均为 QEMU 段错误，不是 SSH 故障。 | 专用构建已给可选日志加空指针保护，并修正两处独立的 `quick_sort` 闭区间越界；两种修改都要在方法记录中披露。修订版单独通过了六盘顺序预热，四组正式重跑仍须逐项验收。 |
 | LearnedFTL 顺序写报 free line 耗尽 | 六轮预热后曾在 4 KiB 写中 QEMU 段错误；诊断复现时 free 队列为空但计数为 1，victim 从 17 增至 240。源码低空闲回退漏设 `vl`，会跳过回收；另一个分支可把已在 victim 队列的当前 line 重复入队。原版成功轮次每 550 次用户 4 KiB 写触发 550 次 GC、约 1756 万次 GC 页写，说明性能低另有整 line 搬迁原因。 | 用独立 `build_gc_fixed.py` 构建修复候选版，并按下文的全新镜像流程验证。强制边界分支和两次无插桩复测通过，但写速仍约 8 IOPS；不要将候选版数据混入原版图 14。详见 `GC_ROOT_CAUSE_2026-09-26.zh-CN.md`。 |
-| 把旧图或旧状态误当为正式复现 | 旧图画的是实际测得的数据，但负载生成方式有缺陷；图形本身能生成、`fio error=0`、速度稳定都不足以证明方法正确。 | `bash reproduction/run_paper_fig14.sh --status` 会因旧 JSON 缺少 `filesize` 而标为未完成。保留旧图只作诊断；四种算法需同一正确命令、各自六盘预热、三轮 60 秒后重新绘图。 |
+| 把旧图或旧状态误当为正式复现 | 旧图画的是实际测得的数据，但负载生成方式有缺陷；图形本身能生成、`fio error=0`、速度稳定都不足以证明方法正确。 | `bash reproduction/run_paper_fig14.sh --status` 会因旧任务文件版本与哈希缺失而标为未完成。保留旧图只作诊断；四种算法需同一正确命令、各自六盘预热、三轮 60 秒后重新绘图。 |
 
 旧的 4 KiB 随机读绝对速度、写入异常和 LeaFTL 崩溃还有各自的问题；这里的顺序读负载修复**不能自动解释或修复其他负载**。如果看到新的异常，先保存原始 fio JSON、I/O 地址日志、QEMU 日志和方法记录，再改参数；一次只改一个变量，以便判断因果。
 
@@ -170,7 +173,7 @@ bash reproduction/verify_fio_address_range.sh
 | 模型分段 | 论文 8 段 | 保持作者发布算法设定 |
 | FIO 测量 | 4 KiB、`psync`、64 线程、随机/顺序读写、至少三轮 | 64 `numjobs`、每轮 60 秒、三轮；**60 秒是脚本选择，论文未给单轮时长** |
 | 预热 | 512 KiB 随机/顺序写约六盘；读测试各用相应模式 | 每项六盘；随机预热用 `norandommap=1,randrepeat=0`。**论文未说明随机映射策略**，这里允许重复命中，以免发布代码在满盘后垃圾回收近乎停滞 |
-| 测试范围 | 论文未公开具体 FIO 分区方式、随机种子和运行顺序 | 明确指定 `filesize=30518m`，64 作业各用 `floor(30518/64)=476` MiB 独立区域；顺序读的相邻起点间隔为 476 MiB + 4 KiB，使起点依次错开一页，64 个区域仍不重叠且都在盘内。其他负载间隔为 476 MiB。显式 `filesize` 修正后，旧间隔和错开间隔的短测吞吐接近；论文未说明任务起点，这只是记录在案的脚本设置，不能说错开本身带来性能提升；`randrepeat=0`；固定脚本所列算法/负载顺序。每项新虚拟机，写盘内容不跨项保留 |
+| 测试范围 | 论文未公开具体 FIO 分区方式、随机种子和运行顺序 | 为每个作业分别指定 `offset` 与 `filesize=offset+476 MiB`，64 作业各用 `floor(30518/64)=476` MiB 独立区域；顺序读的相邻起点间隔为 476 MiB + 4 KiB，使起点依次错开一页，64 个区域仍不重叠且都在盘内。其他负载间隔为 476 MiB。**旧全局 filesize 短测不能证明独立区域性能；**论文未说明任务起点，这只是记录在案的脚本设置，不能说错开本身带来性能提升；`randrepeat=0`；固定脚本所列算法/负载顺序。每项新虚拟机，写盘内容不跨项保留 |
 | 宿主内存 | 论文未说明页锁定失败处理 | 本机 `mlock` 上限约 8 MiB；作者代码做了仅日志告警的宿主适配，可能带来页缺失干扰 |
 | 吞吐、命中、写放大 | 图 14 三面板 | 原始 FIO 吞吐和 FEMU 计数器计算；图是我们的重新测量，不能先验保证数值等于论文 |
 
@@ -322,3 +325,10 @@ CG_ASSERT_MODEL_BITMAP=1 CG_BORROW_ALLOW_MULTI=1 CG_BORROW_DONOR_LIMIT=2 CG_BORR
 ### 顺序写仍需解决
 
 同一诊断借用策略在 40 秒顺序写中没有借用成功，末十秒约 4 MiB/s，详情见进度记录第七轮。日志中有未训练组，但单组剩余页数不足当前 8,192 页借用资格；不能把“有组”误读为“能借”。若 `MODEL_BITMAP_AUDIT attempts=0`，严格模型验证会失败，这表示该轮**未覆盖模型预测路径**，即使 fio 和读回均无错误，也不能宣称模型检查通过。不要把这轮结果写进论文图。
+
+
+### 2026-09-29 顺序写受控对照与下一步
+
+旧全局 `filesize=30518m` 不能保证每任务 476 MiB 区域。更正后，64×476 MiB、40 秒的顺序写末十秒仍约 7.64 MiB/s，借用 0；同一诊断二进制和多组借用开关下，64×128 MiB 一轮触发 431,416 页借用、47 次联合 GC，末段日志约 313.87 MiB/s，但有缺失秒与不完整样本。受限一对一版本在活跃 donor 同时写入时主动终止，不能算性能结果。原始目录、正确性检查及方法差异见进度记录第八轮和 [fio 地址范围核验](FIO_ADDRESS_LAYOUT_2026-09-29.zh-CN.md)。**这些是新盘短时诊断，不是论文图 14。**
+
+正式续跑先用 `bash reproduction/run_paper_fig14.sh --status` 核对旧结果当前为 18 项未完成、2 项失败。执行 `--resume` 时脚本会先将未完成项的旧原始目录移动到 `results/paper_fig14-archive/时间戳/`，再从头预热和测量。每轮必须保存 `runN-jobfile.fio`、`runN-console.json`、原始 fio JSON 和 `method.json`；缺任务文件、哈希不符或版本不是 `explicit-per-job-end-v1` 均判未完成。脚本现在能生成正确地址，不意味着 LearnedFTL 和 LeaFTL 的写入问题已经修复。

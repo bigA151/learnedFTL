@@ -31,7 +31,9 @@ with (root / 'fio-bw.log').open() as source:
         item[0] += int(kib_per_second.strip())
         item[1] += 1
 expected_seconds = set(range(1, method['fio_seconds'] + 1))
-assert expected_seconds == set(by_second), 'missing bandwidth second(s)'
+missing_seconds = sorted(expected_seconds - set(by_second))
+for second in missing_seconds:
+    by_second[second] = [0, 0]  # No log row; keep visible, do not claim measured zero I/O.
 out = root / 'fio-bw-per-second.csv'
 with out.open('w', newline='') as f:
     writer = csv.writer(f)
@@ -44,12 +46,14 @@ n = min(10, method['fio_seconds'])
 summary = {
     'result': str(root.resolve()),
     'seconds': len(values),
+    'missing_log_seconds': missing_seconds,
     'fio_jobs': method['fio_jobs'],
     'fio_mean_mib_per_s': job['write']['bw_bytes'] / 1048576,
-    'log_mean_mib_per_s': sum(values.values()) / len(values),
+    'log_mean_mib_per_s': sum(values.values()) / len(values),  # Missing log seconds provisionally zero; cross-check fio JSON.
     'first_window_mib_per_s': sum(values[i] for i in range(1, n + 1)) / n,
     'last_window_mib_per_s': sum(values[i] for i in range(method['fio_seconds'] - n + 1, method['fio_seconds'] + 1)) / n,
     'window_seconds': n,
+    'last_window_full_sample_seconds': sum(by_second[i][1] == method['fio_jobs'] for i in range(method['fio_seconds'] - n + 1, method['fio_seconds'] + 1)),
     'min_job_samples_in_second': min(x[1] for x in by_second.values()),
     'max_job_samples_in_second': max(x[1] for x in by_second.values()),
 }

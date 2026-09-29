@@ -113,10 +113,30 @@ fi
 ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 \
   'sudo nvme admin-passthru /dev/nvme0 --opcode=0xef --cdw10=8' > "$out/reset.out" 2> "$out/reset.err"
 echo "Measuring ${jobs:-64}-job 4 KiB $pattern for $runtime s"
+if [[ "${GC_EXPLICIT_RANGES:-0}" == 1 ]]; then
+  python3 - "$jobs" "$pattern" "$runtime" "$measure_size_mib" "$offset_increment_kib" "${GC_BW_LOG:-0}" > "$out/measure.fio" <<'PY_FIO_JOB'
+import sys
+jobs,pattern,runtime,region_mib,stride_kib,bw=map(str,sys.argv[1:])
+jobs,runtime,region_mib,stride_kib=map(int,(jobs,runtime,region_mib,stride_kib))
+print('[global]\nfilename=/dev/nvme0n1\nrw='+pattern+'\nbs=4k\nioengine=psync\ndirect=1\ngroup_reporting=1\ntime_based=1\nruntime='+str(runtime)+'\nrandrepeat=0')
+if bw=='1': print('write_bw_log=/tmp/femu-bw\nlog_avg_msec=1000\nper_job_logs=0')
+for job in range(jobs):
+ start=job*stride_kib
+ end=start+region_mib*1024
+ assert end<=30518*1024
+ print(f'[job{job:02d}]\noffset={start}k\nfilesize={end}k\nsize={region_mib*1024}k')
+PY_FIO_JOB
+  ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 'cat > /tmp/gc-explicit-regions.fio' < "$out/measure.fio"
+fi
 set +e
-ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 \
-  "sudo fio --name=gc-diag --filename=/dev/nvme0n1 --rw=$pattern --bs=4k --ioengine=psync --direct=1 --numjobs=${jobs:-64} --group_reporting --filesize=30518m --size=${measure_size_mib}m --offset_increment=${offset_increment_kib}k --time_based=1 --runtime=$runtime --randrepeat=0 --output-format=json $bwlog_opts" \
-  > "$out/fio.json" 2> "$out/fio.err"
+if [[ "${GC_EXPLICIT_RANGES:-0}" == 1 ]]; then
+  ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 \
+    'sudo fio /tmp/gc-explicit-regions.fio --output-format=json' > "$out/fio.json" 2> "$out/fio.err"
+else
+  ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 \
+    "sudo fio --name=gc-diag --filename=/dev/nvme0n1 --rw=$pattern --bs=4k --ioengine=psync --direct=1 --numjobs=${jobs:-64} --group_reporting --filesize=30518m --size=${measure_size_mib}m --offset_increment=${offset_increment_kib}k --time_based=1 --runtime=$runtime --randrepeat=0 --output-format=json $bwlog_opts" \
+    > "$out/fio.json" 2> "$out/fio.err"
+fi
 fio_rc=$?
 if [[ "${GC_BW_LOG:-0}" == 1 ]]; then
   ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 'cd /tmp && cat femu-bw_bw*.log' \
@@ -159,8 +179,10 @@ with open(p+'/method.json','w') as f:
  json.dump({'binary':binary,'warmup_passes':int(passes),'warmup_pattern':warmup_pattern,
             'warmup_bytes':int(warmup_io_mib)*1048576,'fio_bs':'4k',
             'fio_engine':'psync','fio_pattern':pattern,'fio_jobs':int(jobs),'fio_seconds':int(runtime),
-            'fio_filesize_mib':30518,'fio_size_mib':int(__import__('os').environ.get('GC_MEASURE_SIZE_MIB','476')),'prepare_seconds':int(__import__('os').environ.get('GC_PREPARE_SECONDS','0')),'sparse_groups':int(__import__('os').environ.get('GC_PREPARE_SPARSE_GROUPS','0')),'offset_increment':offset_increment_kib+'k',
+            'fio_filesize_mib':None if __import__('os').environ.get('GC_EXPLICIT_RANGES')=='1' else 30518,'fio_size_mib':int(__import__('os').environ.get('GC_MEASURE_SIZE_MIB','476')),'prepare_seconds':int(__import__('os').environ.get('GC_PREPARE_SECONDS','0')),'sparse_groups':int(__import__('os').environ.get('GC_PREPARE_SPARSE_GROUPS','0')),'offset_increment':offset_increment_kib+'k',
             'fio_returncode':int(fio_rc),'report_returncode':int(report_rc),
+            'address_layout':'explicit-per-job-end-v1' if __import__('os').environ.get('GC_EXPLICIT_RANGES')=='1' else 'legacy-global-filesize',
+            'jobfile_sha256':__import__('hashlib').sha256(open(p+'/measure.fio','rb').read()).hexdigest() if __import__('os').path.exists(p+'/measure.fio') else None,
             'guest_image':image,'pair_trigger':int(__import__('os').environ.get('CG_BORROW_PAIR_TRIGGER','8192')),'allow_multi':bool(__import__('os').environ.get('CG_BORROW_ALLOW_MULTI')),'allow_low_free':bool(__import__('os').environ.get('CG_ALLOW_LOW_FREE')),'borrow_sticky':bool(__import__('os').environ.get('CG_BORROW_STICKY')),'donor_limit':int(__import__('os').environ.get('CG_BORROW_DONOR_LIMIT','256')),'post_read':bool(int(__import__('os').environ.get('GC_POST_READ','0'))),'assert_model_bitmap':bool(__import__('os').environ.get('CG_ASSERT_MODEL_BITMAP')),'test_budget_free':__import__('os').environ.get('CG_TEST_BUDGET_FREE'),'test_fail_target_at':__import__('os').environ.get('CG_TEST_FAIL_TARGET_AT')},f,indent=2)
  f.write('\n')
 PY

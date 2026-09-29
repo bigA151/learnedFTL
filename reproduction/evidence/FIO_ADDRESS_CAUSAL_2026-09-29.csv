@@ -1,0 +1,6 @@
+condition,result_id,address_layout,region_mib,fio_exit,fio_mean_mib_s,last10_log_mib_s,missing_log_seconds,borrow_pages,paired_gc,notes
+legacy_global_476,gc-20260929T143628Z-3391219,legacy-global-filesize,476,0,750.76,4.045,,0,0,
+explicit_476_default,gc-20260929T152140Z-657051,explicit-per-job-end-v1,476,0,757.052,2.689,,0,0,
+explicit_128_one_to_one,gc-20260929T152310Z-701982,explicit-per-job-end-v1,128,255,,,,,,guard CG_ACTIVE_DONOR_WRITER
+explicit_128_multi_sticky,gc-20260929T152422Z-739212,explicit-per-job-end-v1,128,0,443.634,313.871,"29,30",431416,47,last second partial; seconds 29-30 missing
+explicit_476_multi_sticky,gc-20260929T152748Z-847985,explicit-per-job-end-v1,476,0,750.525,7.637,,0,0,

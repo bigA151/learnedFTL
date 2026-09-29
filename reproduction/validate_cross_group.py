@@ -24,6 +24,15 @@ assert borrow and identity, 'missing end-of-run counters'
 attempts, success, pages, paired = map(int, borrow.groups())
 writes, copies, reads = map(int, identity.groups())
 assert attempts >= success == pages and writes > 0
+reasons = re.search(r'CG_BORROW_REASONS attempts=(\d+) high=(\d+) low=(\d+) no_open=(\d+) no_room=(\d+) trained=(\d+) selected=(\d+) gated_with_candidate=(\d+)', log)
+snapshot = re.search(r'CG_DONOR_POLICY free=(\d+) open=(\d+) room=(\d+) eligible=(\d+) eligible_pages=(\d+) gate_open=(\d+)', log)
+assert reasons and snapshot, 'missing donor decision audit'
+r_attempts, high, low, no_open, no_room, trained, selected, gated = map(int, reasons.groups())
+assert r_attempts == attempts == high + low + no_open + no_room + trained + selected
+assert selected == success and gated <= high + low
+free, open_count, room_count, eligible, eligible_pages, gate_open = map(int, snapshot.groups())
+assert open_count >= room_count >= eligible >= 0
+assert gate_open == int(32 < free <= 128)
 if args.require_borrow:
     assert success > 0, 'borrowing was not exercised'
 if args.require_pair:

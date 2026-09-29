@@ -9,6 +9,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('result', type=Path)
 parser.add_argument('--require-borrow', action='store_true')
 parser.add_argument('--require-pair', action='store_true')
+parser.add_argument('--min-component-groups', type=int, default=2)
 args = parser.parse_args()
 p = args.result
 method = json.loads((p / 'method.json').read_text())
@@ -46,7 +47,9 @@ if args.require_pair:
     components = re.findall(r'CG_COMPONENT hot=(\d+) donor=(\d+) groups=(\d+) lines=(\d+)', log)
     budgets = re.findall(r'CG_BUDGET free=(\d+) live_pages=(\d+) estimate_pages=(\d+) reserve_lines=(\d+)', log)
     assert len(components) == len(budgets) == paired, 'missing component or budget preflight'
-    assert all(int(groups) == 2 for _, _, groups, _ in components)
+    assert any(int(groups) >= args.min_component_groups
+               for _, _, groups, _ in components), 'required component size was not exercised'
+    assert len(re.findall(r'CG_COMPONENT_GC hot=', log)) == paired, 'component GC did not finish'
     assert all(int(free) >= int(reserve) and int(estimate) >= int(live)
                for free, live, estimate, reserve in budgets)
 if method.get('post_read'):

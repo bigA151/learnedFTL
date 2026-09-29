@@ -165,19 +165,21 @@ static bool cg_donor_candidate(struct write_pointer *candidate,
     return candidate != hot && candidate->curline &&
            candidate->curline->rest >= cg_borrow_min_free &&
            !cg_group_trained[candidate->id] &&
-           cg_donor_hot[candidate->id] < 0 && cg_hot_donor[candidate->id] < 0;
+           candidate->id < cg_donor_limit &&
+           (cg_allow_multi ||
+            (cg_donor_hot[candidate->id] < 0 && cg_hot_donor[candidate->id] < 0));
 }
 
 static struct write_pointer *cg_select_donor(struct ssd *ssd, struct write_pointer *hot)
 {
     struct write_pointer *best = NULL;
     bool open = false, room = false, untrained = false;
-    if (cg_donor_hot[hot->id] >= 0) {
+    if (!cg_allow_multi && cg_donor_hot[hot->id] >= 0) {
         femu_log("CG_ACTIVE_DONOR_WRITER group=%d borrower=%d\n",
                  hot->id, cg_donor_hot[hot->id]);
         abort();
     }
-    if (cg_hot_donor[hot->id] >= 0) {
+    if (!cg_allow_multi && cg_hot_donor[hot->id] >= 0) {
         struct write_pointer *pinned = &ssd->gtd_wps[cg_hot_donor[hot->id]];
         if (!pinned->curline || pinned->curline->rest <= 0 ||
             cg_donor_hot[pinned->id] != hot->id) abort();
@@ -234,9 +236,10 @@ static void cg_donor_snapshot(struct ssd *ssd)
              ssd->lm.free_line_cnt <= 128);
 }
 
-static void cg_component_check(struct ssd *ssd, int hot, int donor)
+static void cg_component_check(struct ssd *ssd, int hot, int donor,
+                               bool groups[256], bool lines[256],
+                               int *group_count_out, int *line_count_out)
 {
-    bool groups[256] = {0}, lines[256] = {0};
     groups[hot] = groups[donor] = true;
     bool changed;
     do {
@@ -268,13 +271,14 @@ static void cg_component_check(struct ssd *ssd, int hot, int donor)
     uint64_t live_pages = 0;
     for (int line = 0; line < ssd->sp.tt_lines; line++)
         if (lines[line]) live_pages += ssd->lm.lines[line].vpc;
-    /* Conservative screening bound for this two-group prototype: data pages
+    /* Conservative screening bound for the connected component: data pages
      * plus up to one translation page per GTD per source line. It is not yet
      * a simulation of the full migration schedule. */
     uint64_t estimate = live_pages +
         (uint64_t)group_count * line_count * ssd->sp.trans_per_line;
     int reserve_lines = (estimate + ssd->sp.pgs_per_line - 1) /
                         ssd->sp.pgs_per_line;
+    if (reserve_lines < group_count) reserve_lines = group_count;
     if (reserve_lines < 2) reserve_lines = 2;
     femu_log("CG_COMPONENT hot=%d donor=%d groups=%d lines=%d\n",
              hot, donor, group_count, line_count);
@@ -286,13 +290,8 @@ static void cg_component_check(struct ssd *ssd, int hot, int donor)
                  ssd->lm.free_line_cnt, reserve_lines);
         abort();
     }
-    /* The current pair collector handles only two groups. Stop before it
-     * mutates queues if the true connected component is wider. */
-    if (group_count > 2) {
-        femu_log("CG_COMPONENT_UNSUPPORTED hot=%d donor=%d groups=%d lines=%d\n",
-                 hot, donor, group_count, line_count);
-        abort();
-    }
+    *group_count_out = group_count;
+    *line_count_out = line_count;
 }
 
 static void cg_close_hot_line(struct ssd *ssd, struct write_pointer *hot)
@@ -307,31 +306,56 @@ static void cg_close_hot_line(struct ssd *ssd, struct write_pointer *hot)
 static void cg_reclaim_pair(struct ssd *ssd, struct write_pointer *hot,
                             struct write_pointer *donor)
 {
-    struct line *hot_line = hot->curline;
-    struct line *donor_line = donor->curline;
-    cg_component_check(ssd, hot->id, donor->id);
-    if (ssd->lm.free_line_cnt < 2 || !hot_line || !donor_line ||
-        !cg_hot_closed[hot->id]) {
-        femu_log("CG_PAIR_NO_SPACE free=%d hot=%d donor=%d\n",
-                 ssd->lm.free_line_cnt, hot->id, donor->id);
-        abort();
+    bool groups[256] = {0}, lines[256] = {0};
+    int group_count = 0, line_count = 0;
+    if (!hot->curline || !donor->curline || !cg_hot_closed[hot->id]) abort();
+    cg_component_check(ssd, hot->id, donor->id, groups, lines,
+                       &group_count, &line_count);
+    /* Snapshot the complete component before mutating any owner pointer. */
+    struct gc_gtd_buffer *buffer = gc_gtd_buffer_new(ssd);
+    for (int group = 0; group < ssd->sp.tt_line_wps; group++) {
+        if (!groups[group]) continue;
+        struct write_pointer *wp = &ssd->gtd_wps[group];
+        init_line_write_pointer(ssd, wp, false);
+        if (!wp->curline || wp->curline->rest <= 0) abort();
     }
-    QTAILQ_INSERT_TAIL(&ssd->lm.victim_list, donor_line, entry);
-    ssd->lm.victim_line_cnt++;
-    init_line_write_pointer(ssd, hot, false);
-    init_line_write_pointer(ssd, donor, false);
-    if (!hot->curline || !donor->curline) abort();
-    /* Collect all owned lines for both GTD groups.  The shared donor line
-     * can contain LPNs from the hot group and any additional borrowers;
-     * model_training_groups routes each LPN by its complete GTD index. */
-    batch_line_do_gc(ssd, true, hot, NULL);
-    batch_line_do_gc(ssd, true, donor, NULL);
-    cg_hot_donor[hot->id] = -1;
-    cg_donor_hot[donor->id] = -1;
+    /* Every source line is visited once. Collect all valid LPNs into a
+     * full-GTD buffer before training any of the component's models. */
+    for (int line_id = 0; line_id < ssd->sp.tt_lines; line_id++) {
+        if (!lines[line_id]) continue;
+        struct line *source = &ssd->lm.lines[line_id];
+        struct write_pointer *owner = ssd->line2write_pointer[line_id];
+        struct ppa ppa = { .ppa = 0 };
+        ppa.g.blk = line_id;
+        if (!owner || !groups[owner->id]) {
+            femu_log("CG_COMPONENT_BAD_OWNER line=%d\n", line_id);
+            abort();
+        }
+        if (!gc_diag_victim_contains(ssd, source)) {
+            QTAILQ_INSERT_TAIL(&ssd->lm.victim_list, source, entry);
+            ssd->lm.victim_line_cnt++;
+        }
+        gc_read_all_valid_data(ssd, &ppa, buffer);
+        clear_one_write_pointer_victim_lines(owner->wpl, source);
+        owner->vic_cnt--;
+        ssd->stat.gc_times++;
+        ssd->stat.line_gc_times[line_id]++;
+        ssd->stat.wp_victims[owner->id]++;
+        ssd->stat.line_wp_gc_times++;
+        mark_line_free(ssd, &ppa);
+    }
+    model_training_groups(ssd, buffer);
+    gc_gtd_buffer_free(ssd, buffer);
+    for (int group = 0; group < ssd->sp.tt_line_wps; group++) {
+        if (!groups[group]) continue;
+        cg_hot_donor[group] = -1;
+        cg_donor_hot[group] = -1;
+    }
     cg_paired_gc++;
-    cg_relation_check(ssd, "after-pair");
-    femu_log("CG_PAIR_GC hot=%d donor=%d free=%d\n",
-             hot->id, donor->id, ssd->lm.free_line_cnt);
+    cg_relation_check(ssd, "after-component");
+    femu_log("CG_COMPONENT_GC hot=%d donor=%d groups=%d lines=%d free=%d\n",
+             hot->id, donor->id, group_count, line_count,
+             ssd->lm.free_line_cnt);
 }
 '''
 
@@ -349,6 +373,8 @@ def enable_borrow(source: str) -> str:
         "static uint64_t cg_borrow_attempts, cg_borrow_success, cg_borrow_pages;\n"
         "static int cg_borrow_min_free = 8192;\n"
         "static int cg_pair_trigger = 8192;\n"
+        "static int cg_donor_limit = 256;\n"
+        "static bool cg_allow_multi;\n"
         "static uint64_t cg_paired_gc;\n"
         "static uint64_t cg_reason_high, cg_reason_low, cg_reason_no_open;\n"
         "static uint64_t cg_reason_no_room, cg_reason_trained, cg_reason_busy, cg_reason_selected;\n"
@@ -388,6 +414,14 @@ def enable_borrow(source: str) -> str:
             abort();
         }
         cg_pair_trigger = value;
+    }
+    cg_allow_multi = getenv("CG_BORROW_ALLOW_MULTI") != NULL;
+    const char *limit_text = getenv("CG_BORROW_DONOR_LIMIT");
+    if (limit_text) {
+        char *end = NULL;
+        long value = strtol(limit_text, &end, 10);
+        if (*end || value < 1 || value > ssd->sp.tt_line_wps) abort();
+        cg_donor_limit = value;
     }''')
     source = replace_once(source,
         '    ssd->line2write_pointer[wpp->curline->id] = wpp;',

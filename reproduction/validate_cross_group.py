@@ -16,7 +16,8 @@ fio = json.loads((p / 'fio.json').read_text())['jobs'][0]
 log = (p / 'qemu.log').read_text(errors='replace')
 assert method['fio_returncode'] == method['report_returncode'] == fio['error'] == 0
 for bad in ('PHYS_ID_MISMATCH', 'PHYS_ID_NO_SOURCE', 'GC_EXHAUST',
-            'GC_BAD_FREE_TARGET', 'GC_INVARIANT', 'GC_GROUP_NO_TARGET'):
+            'GC_BAD_FREE_TARGET', 'GC_INVARIANT', 'GC_GROUP_NO_TARGET',
+            'CG_RELATION_MISMATCH', 'CG_COMPONENT_UNSUPPORTED'):
     assert bad not in log, bad
 borrow = re.search(r'CG_BORROW attempts=(\d+) success=(\d+) pages=(\d+) paired_gc=(\d+)', log)
 identity = re.search(r'PHYS_ID_SUMMARY writes=(\d+) copies=(\d+) reads=(\d+)', log)
@@ -24,11 +25,15 @@ assert borrow and identity, 'missing end-of-run counters'
 attempts, success, pages, paired = map(int, borrow.groups())
 writes, copies, reads = map(int, identity.groups())
 assert attempts >= success == pages and writes > 0
-reasons = re.search(r'CG_BORROW_REASONS attempts=(\d+) high=(\d+) low=(\d+) no_open=(\d+) no_room=(\d+) trained=(\d+) selected=(\d+) gated_with_candidate=(\d+)', log)
+reasons = re.search(r'CG_BORROW_REASONS attempts=(\d+) high=(\d+) low=(\d+) no_open=(\d+) no_room=(\d+) trained=(\d+) busy=(\d+) selected=(\d+) gated_with_candidate=(\d+)', log)
 snapshot = re.search(r'CG_DONOR_POLICY free=(\d+) open=(\d+) room=(\d+) eligible=(\d+) eligible_pages=(\d+) gate_open=(\d+)', log)
 assert reasons and snapshot, 'missing donor decision audit'
-r_attempts, high, low, no_open, no_room, trained, selected, gated = map(int, reasons.groups())
-assert r_attempts == attempts == high + low + no_open + no_room + trained + selected
+relation = re.search(r'CG_RELATION phase=after-fio links=(\d+) shared_lines=(\d+)', log)
+assert relation, 'missing end-of-run relation audit'
+links, shared_lines = map(int, relation.groups())
+assert links >= shared_lines >= 0
+r_attempts, high, low, no_open, no_room, trained, busy, selected, gated = map(int, reasons.groups())
+assert r_attempts == attempts == high + low + no_open + no_room + trained + busy + selected
 assert selected == success and gated <= high + low
 free, open_count, room_count, eligible, eligible_pages, gate_open = map(int, snapshot.groups())
 assert open_count >= room_count >= eligible >= 0

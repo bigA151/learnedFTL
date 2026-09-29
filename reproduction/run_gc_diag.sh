@@ -9,6 +9,9 @@ runtime="${RUNTIME_SECONDS:-60}"
 passes="${WARMUP_PASSES:-6}"
 warmup_io_mib="${GC_WARMUP_IO_MIB:-$((30518*passes))}"
 jobs="${GC_FIO_JOBS:-64}"
+prepare_seconds="${GC_PREPARE_SECONDS:-0}"
+sparse_groups="${GC_PREPARE_SPARSE_GROUPS:-0}"
+measure_size_mib="${GC_MEASURE_SIZE_MIB:-476}"
 pattern="${GC_FIO_PATTERN:-write}"
 warmup_pattern="${GC_WARMUP_PATTERN:-write}"
 [[ "$warmup_pattern" == write || "$warmup_pattern" == randwrite ]] || exit 2
@@ -17,7 +20,8 @@ if [[ "${GC_BW_LOG:-0}" == 1 ]]; then bwlog_opts="--write_bw_log=/tmp/femu-bw --
 warmup_extra=""
 [[ "$warmup_pattern" == randwrite ]] && warmup_extra="--norandommap=1 --randrepeat=0"
 [[ "$pattern" == write || "$pattern" == randwrite ]] || exit 2
-[[ "$runtime" =~ ^[1-9][0-9]*$ && "$passes" =~ ^(0|[1-9][0-9]*)$ && "$warmup_io_mib" =~ ^(0|[1-9][0-9]*)$ && "$jobs" =~ ^[1-9][0-9]*$ ]] || exit 2
+[[ "$runtime" =~ ^[1-9][0-9]*$ && "$passes" =~ ^(0|[1-9][0-9]*)$ && "$warmup_io_mib" =~ ^(0|[1-9][0-9]*)$ && "$jobs" =~ ^[1-9][0-9]*$ && "$prepare_seconds" =~ ^(0|[1-9][0-9]*)$ && "$sparse_groups" =~ ^(0|[1-9][0-9]*)$ && "$measure_size_mib" =~ ^[1-9][0-9]*$ ]] || exit 2
+(( measure_size_mib <= 476 && sparse_groups <= 235 )) || exit 2
 (( jobs <= 64 )) || exit 2
 binary="${GC_DIAG_BINARY:-qemu-learnedftl-gc-diag}"
 offset_increment_kib="${GC_OFFSET_INCREMENT_KIB:-487428}"
@@ -84,12 +88,34 @@ PY
 else
   printf '{"skipped":true,"reason":"fresh FEMU device; no prewarm"}\n' > "$out/warmup.json"
 fi
+if (( sparse_groups > 0 )); then
+  echo "Preparing $sparse_groups sparse groups with one 4 KiB write each (diagnostic only)"
+  ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 \
+    "sudo fio --name=sparse-groups --filename=/dev/nvme0n1 --rw=write --bs=4k --ioengine=psync --direct=1 --numjobs=$sparse_groups --group_reporting --filesize=30518m --size=4k --offset_increment=131072k --output-format=json" \
+    > "$out/sparse-prepare.json" 2> "$out/sparse-prepare.err"
+  python3 - "$out/sparse-prepare.json" "$sparse_groups" <<'PY_SPARSE'
+import json,sys
+entry=json.load(open(sys.argv[1]))['jobs'][0]
+assert entry['error']==0 and entry['write']['io_bytes']==int(sys.argv[2])*4096
+PY_SPARSE
+fi
+if (( prepare_seconds > 0 )); then
+  echo "Preparing 64-job 4 KiB sequential state for $prepare_seconds s (diagnostic only)"
+  ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 \
+    "sudo fio --name=prepare-gc-diag --filename=/dev/nvme0n1 --rw=write --bs=4k --ioengine=psync --direct=1 --numjobs=64 --group_reporting --filesize=30518m --size=476m --offset_increment=487428k --time_based=1 --runtime=$prepare_seconds --output-format=json" \
+    > "$out/prepare.json" 2> "$out/prepare.err"
+  python3 - "$out/prepare.json" <<'PY_PREPARE'
+import json,sys
+entry=json.load(open(sys.argv[1]))['jobs'][0]
+assert entry['error']==0 and entry['write']['io_bytes']>0
+PY_PREPARE
+fi
 ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 \
   'sudo nvme admin-passthru /dev/nvme0 --opcode=0xef --cdw10=8' > "$out/reset.out" 2> "$out/reset.err"
 echo "Measuring ${jobs:-64}-job 4 KiB $pattern for $runtime s"
 set +e
 ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 \
-  "sudo fio --name=gc-diag --filename=/dev/nvme0n1 --rw=$pattern --bs=4k --ioengine=psync --direct=1 --numjobs=${jobs:-64} --group_reporting --filesize=30518m --size=476m --offset_increment=${offset_increment_kib}k --time_based=1 --runtime=$runtime --randrepeat=0 --output-format=json $bwlog_opts" \
+  "sudo fio --name=gc-diag --filename=/dev/nvme0n1 --rw=$pattern --bs=4k --ioengine=psync --direct=1 --numjobs=${jobs:-64} --group_reporting --filesize=30518m --size=${measure_size_mib}m --offset_increment=${offset_increment_kib}k --time_based=1 --runtime=$runtime --randrepeat=0 --output-format=json $bwlog_opts" \
   > "$out/fio.json" 2> "$out/fio.err"
 fio_rc=$?
 if [[ "${GC_BW_LOG:-0}" == 1 ]]; then
@@ -133,9 +159,9 @@ with open(p+'/method.json','w') as f:
  json.dump({'binary':binary,'warmup_passes':int(passes),'warmup_pattern':warmup_pattern,
             'warmup_bytes':int(warmup_io_mib)*1048576,'fio_bs':'4k',
             'fio_engine':'psync','fio_pattern':pattern,'fio_jobs':int(jobs),'fio_seconds':int(runtime),
-            'fio_filesize_mib':30518,'offset_increment':offset_increment_kib+'k',
+            'fio_filesize_mib':30518,'fio_size_mib':int(__import__('os').environ.get('GC_MEASURE_SIZE_MIB','476')),'prepare_seconds':int(__import__('os').environ.get('GC_PREPARE_SECONDS','0')),'sparse_groups':int(__import__('os').environ.get('GC_PREPARE_SPARSE_GROUPS','0')),'offset_increment':offset_increment_kib+'k',
             'fio_returncode':int(fio_rc),'report_returncode':int(report_rc),
-            'guest_image':image,'post_read':bool(int(__import__('os').environ.get('GC_POST_READ','0')))},f,indent=2)
+            'guest_image':image,'pair_trigger':int(__import__('os').environ.get('CG_BORROW_PAIR_TRIGGER','8192')),'post_read':bool(int(__import__('os').environ.get('GC_POST_READ','0')))},f,indent=2)
  f.write('\n')
 PY
 echo "Done: $base/$out (fio=$fio_rc, report=$report_rc)"

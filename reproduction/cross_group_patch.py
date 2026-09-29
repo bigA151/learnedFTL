@@ -119,18 +119,71 @@ def apply(source: str) -> str:
 BORROW = r'''
 /* Selection and audit use the same candidate predicate. The free-line gate is
  * counted separately so a rejected attempt never means there was no donor. */
+static void cg_relation_link(struct ssd *ssd, int group, int line)
+{
+    if (group < 0 || group >= ssd->sp.tt_line_wps ||
+        line < 0 || line >= ssd->sp.tt_lines ||
+        ssd->sp.tt_line_wps > 256 || ssd->sp.tt_lines > 256)
+        abort();
+    cg_line_groups[line][group / 64] |= 1ULL << (group % 64);
+    cg_group_lines[group][line / 64] |= 1ULL << (line % 64);
+}
+
+static void cg_relation_unlink_line(struct ssd *ssd, int line)
+{
+    if (line < 0 || line >= ssd->sp.tt_lines) abort();
+    for (int group = 0; group < ssd->sp.tt_line_wps; group++)
+        cg_group_lines[group][line / 64] &= ~(1ULL << (line % 64));
+    memset(cg_line_groups[line], 0, sizeof(cg_line_groups[0]));
+}
+
+static void cg_relation_check(struct ssd *ssd, const char *phase)
+{
+    uint64_t links = 0, shared = 0;
+    for (int line = 0; line < ssd->sp.tt_lines; line++) {
+        int members = 0;
+        for (int group = 0; group < ssd->sp.tt_line_wps; group++) {
+            bool forward = (cg_line_groups[line][group / 64] >> (group % 64)) & 1;
+            bool reverse = (cg_group_lines[group][line / 64] >> (line % 64)) & 1;
+            if (forward != reverse) {
+                femu_log("CG_RELATION_MISMATCH phase=%s line=%d group=%d\n",
+                         phase, line, group);
+                abort();
+            }
+            members += forward;
+        }
+        links += members;
+        shared += members > 1;
+    }
+    femu_log("CG_RELATION phase=%s links=%" PRIu64 " shared_lines=%" PRIu64
+             "\n", phase, links, shared);
+}
+
 static bool cg_donor_candidate(struct write_pointer *candidate,
                                struct write_pointer *hot)
 {
     return candidate != hot && candidate->curline &&
            candidate->curline->rest >= cg_borrow_min_free &&
-           !cg_group_trained[candidate->id];
+           !cg_group_trained[candidate->id] &&
+           cg_donor_hot[candidate->id] < 0 && cg_hot_donor[candidate->id] < 0;
 }
 
 static struct write_pointer *cg_select_donor(struct ssd *ssd, struct write_pointer *hot)
 {
     struct write_pointer *best = NULL;
     bool open = false, room = false, untrained = false;
+    if (cg_donor_hot[hot->id] >= 0) {
+        femu_log("CG_ACTIVE_DONOR_WRITER group=%d borrower=%d\n",
+                 hot->id, cg_donor_hot[hot->id]);
+        abort();
+    }
+    if (cg_hot_donor[hot->id] >= 0) {
+        struct write_pointer *pinned = &ssd->gtd_wps[cg_hot_donor[hot->id]];
+        if (!pinned->curline || pinned->curline->rest <= 0 ||
+            cg_donor_hot[pinned->id] != hot->id) abort();
+        cg_reason_selected++;
+        return pinned;
+    }
     for (int i = 0; i < ssd->sp.tt_line_wps; i++) {
         struct write_pointer *candidate = &ssd->gtd_wps[i];
         if (candidate == hot || !candidate->curline) continue;
@@ -156,6 +209,7 @@ static struct write_pointer *cg_select_donor(struct ssd *ssd, struct write_point
     if (!open) cg_reason_no_open++;
     else if (!room) cg_reason_no_room++;
     else if (!untrained) cg_reason_trained++;
+    else if (!best) cg_reason_busy++;
     else cg_reason_selected++;
     return best;
 }
@@ -180,6 +234,48 @@ static void cg_donor_snapshot(struct ssd *ssd)
              ssd->lm.free_line_cnt <= 128);
 }
 
+static void cg_component_check(struct ssd *ssd, int hot, int donor)
+{
+    bool groups[256] = {0}, lines[256] = {0};
+    groups[hot] = groups[donor] = true;
+    bool changed;
+    do {
+        changed = false;
+        for (int group = 0; group < ssd->sp.tt_line_wps; group++) {
+            if (!groups[group]) continue;
+            for (int line = 0; line < ssd->sp.tt_lines; line++) {
+                if (!(cg_group_lines[group][line / 64] & (1ULL << (line % 64))) ||
+                    lines[line]) continue;
+                lines[line] = true;
+                changed = true;
+            }
+        }
+        for (int line = 0; line < ssd->sp.tt_lines; line++) {
+            if (!lines[line]) continue;
+            for (int group = 0; group < ssd->sp.tt_line_wps; group++) {
+                if (!(cg_line_groups[line][group / 64] & (1ULL << (group % 64))) ||
+                    groups[group]) continue;
+                groups[group] = true;
+                changed = true;
+            }
+        }
+    } while (changed);
+    int group_count = 0, line_count = 0;
+    for (int group = 0; group < ssd->sp.tt_line_wps; group++)
+        group_count += groups[group];
+    for (int line = 0; line < ssd->sp.tt_lines; line++)
+        line_count += lines[line];
+    femu_log("CG_COMPONENT hot=%d donor=%d groups=%d lines=%d\n",
+             hot, donor, group_count, line_count);
+    /* The current pair collector handles only two groups. Stop before it
+     * mutates queues if the true connected component is wider. */
+    if (group_count > 2) {
+        femu_log("CG_COMPONENT_UNSUPPORTED hot=%d donor=%d groups=%d lines=%d\n",
+                 hot, donor, group_count, line_count);
+        abort();
+    }
+}
+
 static void cg_close_hot_line(struct ssd *ssd, struct write_pointer *hot)
 {
     if (cg_hot_closed[hot->id]) return;
@@ -194,6 +290,7 @@ static void cg_reclaim_pair(struct ssd *ssd, struct write_pointer *hot,
 {
     struct line *hot_line = hot->curline;
     struct line *donor_line = donor->curline;
+    cg_component_check(ssd, hot->id, donor->id);
     if (ssd->lm.free_line_cnt < 2 || !hot_line || !donor_line ||
         !cg_hot_closed[hot->id]) {
         femu_log("CG_PAIR_NO_SPACE free=%d hot=%d donor=%d\n",
@@ -210,7 +307,10 @@ static void cg_reclaim_pair(struct ssd *ssd, struct write_pointer *hot,
      * model_training_groups routes each LPN by its complete GTD index. */
     batch_line_do_gc(ssd, true, hot, NULL);
     batch_line_do_gc(ssd, true, donor, NULL);
+    cg_hot_donor[hot->id] = -1;
+    cg_donor_hot[donor->id] = -1;
     cg_paired_gc++;
+    cg_relation_check(ssd, "after-pair");
     femu_log("CG_PAIR_GC hot=%d donor=%d free=%d\n",
              hot->id, donor->id, ssd->lm.free_line_cnt);
 }
@@ -223,38 +323,66 @@ def enable_borrow(source: str) -> str:
                           'static int free_line_threshold = 32;')
     source = replace_once(source, '    } else if (lm->free_line_cnt < 10) {',
                           '    } else if (lm->free_line_cnt < 64) {')
-    source = replace_once(source, 'void gc_diag_report(struct ssd *ssd)',
+    source = replace_once(source, 'void gc_diag_reset(struct ssd *ssd)',
         "static uint8_t *cg_group_trained, *cg_hot_closed;\n"
-        "static uint64_t (*cg_line_groups)[4];\n"
+        "static int *cg_hot_donor, *cg_donor_hot;\n"
+        "static uint64_t (*cg_line_groups)[4], (*cg_group_lines)[4];\n"
         "static uint64_t cg_borrow_attempts, cg_borrow_success, cg_borrow_pages;\n"
         "static int cg_borrow_min_free = 8192;\n"
+        "static int cg_pair_trigger = 8192;\n"
         "static uint64_t cg_paired_gc;\n"
         "static uint64_t cg_reason_high, cg_reason_low, cg_reason_no_open;\n"
-        "static uint64_t cg_reason_no_room, cg_reason_trained, cg_reason_selected;\n"
+        "static uint64_t cg_reason_no_room, cg_reason_trained, cg_reason_busy, cg_reason_selected;\n"
         "static uint64_t cg_gate_with_candidate;\n"
         "static uint32_t *cg_line_borrow_count;\n"
         "static void cg_donor_snapshot(struct ssd *ssd);\n"
-        "void gc_diag_report(struct ssd *ssd)")
+        "static void cg_relation_link(struct ssd *ssd, int group, int line);\n"
+        "static void cg_relation_unlink_line(struct ssd *ssd, int line);\n"
+        "static void cg_relation_check(struct ssd *ssd, const char *phase);\n"
+        "void gc_diag_reset(struct ssd *ssd)")
+    source = replace_once(source,
+        '    memset(&gc_diag, 0, sizeof(gc_diag));',
+        '    memset(&gc_diag, 0, sizeof(gc_diag));\n'
+        '    cg_borrow_attempts = cg_borrow_success = cg_borrow_pages = 0;\n'
+        '    cg_paired_gc = 0;\n'
+        '    cg_reason_high = cg_reason_low = cg_reason_no_open = 0;\n'
+        '    cg_reason_no_room = cg_reason_trained = cg_reason_busy = cg_reason_selected = 0;\n'
+        '    cg_gate_with_candidate = 0;')
     source = replace_once(source,
         '    ssd->gtd_wps = g_malloc0(sizeof(struct write_pointer) * ssd->sp.tt_line_wps);',
         '''    ssd->gtd_wps = g_malloc0(sizeof(struct write_pointer) * ssd->sp.tt_line_wps);
     cg_group_trained = g_malloc0(ssd->sp.tt_line_wps);
+    cg_hot_donor = g_malloc(sizeof(int) * ssd->sp.tt_line_wps);
+    cg_donor_hot = g_malloc(sizeof(int) * ssd->sp.tt_line_wps);
+    for (int i = 0; i < ssd->sp.tt_line_wps; i++)
+        cg_hot_donor[i] = cg_donor_hot[i] = -1;
     cg_hot_closed = g_malloc0(ssd->sp.tt_line_wps);
     cg_line_groups = g_malloc0(sizeof(*cg_line_groups) * ssd->sp.tt_lines);
-    cg_line_borrow_count = g_malloc0(sizeof(*cg_line_borrow_count) * ssd->sp.tt_lines);''')
+    cg_group_lines = g_malloc0(sizeof(*cg_group_lines) * ssd->sp.tt_line_wps);
+    cg_line_borrow_count = g_malloc0(sizeof(*cg_line_borrow_count) * ssd->sp.tt_lines);
+    const char *trigger_text = getenv("CG_BORROW_PAIR_TRIGGER");
+    if (trigger_text) {
+        char *end = NULL;
+        long value = strtol(trigger_text, &end, 10);
+        if (*end || value < 1 || value > 32768) {
+            femu_log("CG_BAD_PAIR_TRIGGER value=%s\\n", trigger_text);
+            abort();
+        }
+        cg_pair_trigger = value;
+    }''')
     source = replace_once(source,
         '    ssd->line2write_pointer[wpp->curline->id] = wpp;',
         '''    ssd->line2write_pointer[wpp->curline->id] = wpp;
     memset(cg_line_groups[wpp->curline->id], 0, sizeof(cg_line_groups[0]));
     cg_line_borrow_count[wpp->curline->id] = 0;
     if (wpp != &ssd->trans_wp) {
-        cg_line_groups[wpp->curline->id][wpp->id / 64] |= (1ULL << (wpp->id % 64));
+        cg_relation_link(ssd, wpp->id, wpp->curline->id);
         cg_hot_closed[wpp->id] = 0;
     }''')
     source = replace_once(source,
         '    ssd->line2write_pointer[line->id] = NULL;',
         '''    ssd->line2write_pointer[line->id] = NULL;
-    memset(cg_line_groups[line->id], 0, sizeof(cg_line_groups[0]));''')
+    cg_relation_unlink_line(ssd, line->id);''')
     source = source.replace(
         '                QTAILQ_INSERT_TAIL(&lm->victim_list, wpp->curline, entry);',
         '''                if (!cg_hot_closed[wpp->id]) {
@@ -293,6 +421,10 @@ def enable_borrow(source: str) -> str:
             cg_borrow_attempts++;
             struct write_pointer *donor = cg_select_donor(ssd, lwp);
             if (donor) {
+                if (cg_hot_donor[lwp->id] < 0) {
+                    cg_hot_donor[lwp->id] = donor->id;
+                    cg_donor_hot[donor->id] = lwp->id;
+                }
                 cg_close_hot_line(ssd, lwp);
                 alloc_wp = donor;
             }
@@ -306,13 +438,12 @@ def enable_borrow(source: str) -> str:
             cg_borrow_success++;
             cg_borrow_pages++;
             cg_line_borrow_count[alloc_wp->curline->id]++;
-            cg_line_groups[alloc_wp->curline->id][lwp->id / 64] |=
-                (1ULL << (lwp->id % 64));
+            cg_relation_link(ssd, lwp->id, alloc_wp->curline->id);
         }
         ppa = get_new_line_page(ssd, alloc_wp);''')
     source = replace_once(source,
         '        maxlat = (curlat > maxlat) ? curlat : maxlat;\n        // clock_gettime(CLOCK_MONOTONIC, &time2);',
-        '        maxlat = (curlat > maxlat) ? curlat : maxlat;\n        if (alloc_wp != lwp && cg_line_borrow_count[ppa.g.blk] >= 8192)\n            cg_reclaim_pair(ssd, lwp, alloc_wp);\n        // clock_gettime(CLOCK_MONOTONIC, &time2);')
+        '        maxlat = (curlat > maxlat) ? curlat : maxlat;\n        if (alloc_wp != lwp && cg_line_borrow_count[ppa.g.blk] >= cg_pair_trigger)\n            cg_reclaim_pair(ssd, lwp, alloc_wp);\n        // clock_gettime(CLOCK_MONOTONIC, &time2);')
     # The physical victim is available immediately after its valid LPNs have
     # been staged.  Release it before allocating targets for mixed groups.
     source = replace_once(source,
@@ -361,15 +492,16 @@ def enable_borrow(source: str) -> str:
         '    gc_diag_donor_audit(ssd, "after-fio");',
         '''    gc_diag_donor_audit(ssd, "after-fio");
     femu_log("CG_BORROW attempts=%" PRIu64 " success=%" PRIu64
-             " pages=%" PRIu64 " paired_gc=%" PRIu64 " min_donor_free=%d\\n",
+             " pages=%" PRIu64 " paired_gc=%" PRIu64 " min_donor_free=%d pair_trigger=%d\\n",
              cg_borrow_attempts, cg_borrow_success,
-             cg_borrow_pages, cg_paired_gc, cg_borrow_min_free);
+             cg_borrow_pages, cg_paired_gc, cg_borrow_min_free, cg_pair_trigger);
     femu_log("CG_BORROW_REASONS attempts=%" PRIu64 " high=%" PRIu64
              " low=%" PRIu64 " no_open=%" PRIu64 " no_room=%" PRIu64
-             " trained=%" PRIu64 " selected=%" PRIu64
+             " trained=%" PRIu64 " busy=%" PRIu64 " selected=%" PRIu64
              " gated_with_candidate=%" PRIu64 "\\n",
              cg_borrow_attempts, cg_reason_high, cg_reason_low,
              cg_reason_no_open, cg_reason_no_room, cg_reason_trained,
-             cg_reason_selected, cg_gate_with_candidate);
-    cg_donor_snapshot(ssd);''')
+             cg_reason_busy, cg_reason_selected, cg_gate_with_candidate);
+    cg_donor_snapshot(ssd);
+    cg_relation_check(ssd, "after-fio");''')
     return source

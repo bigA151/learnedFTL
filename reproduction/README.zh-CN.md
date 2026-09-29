@@ -305,3 +305,10 @@ CG_ASSERT_MODEL_BITMAP=1 CG_BORROW_ALLOW_MULTI=1 CG_BORROW_DONOR_LIMIT=2 CG_BORR
 当前一轮 40 秒的新盘短筛查表明：默认门槛下顺序写末 10 秒约 6.94 MiB/s；随机写末 10 秒约 251.18 MiB/s。随机写即使仍有合格冷组，借用也被 `free<=32` 门槛挡住。`CG_ALLOW_LOW_FREE=1` 放行后确有借用，但分散借用导致没有联合 GC；再加 `CG_BORROW_STICKY=1` 才在同轮触发 62 次联合 GC，末 10 秒约 343.17 MiB/s。**这些开关和结果只用于诊断，非论文公开参数，不是正式论文图。**每种配置只有一次独立启动，不能当作稳定性能结论。若实习生复跑，应保存 `method.json`、`manifest.json`、`fio.json`、`fio-bw.log`、两个派生带宽文件以及 `qemu.log`；比较时必须确认开关、fio 地址布局、初始盘面和实际二进制哈希一致。
 
 目标分配故障用例可用 `CG_TEST_FAIL_TARGET_AT=1`，预期 fio/QEMU **失败**且 `qemu.log` 出现 `CG_TARGET_ALLOC_INJECT`，但没有 `CG_COPY_DONE`、`CG_ERASE_DONE`；用 `python3 reproduction/validate_cross_group.py <Output目录> --expect-target-fail` 验证。它是故障注入，不得作为性能结果。实际低空闲（235 稀疏组）短测的 `free=20` 与注入的预算值是两回事；看 `CG_DONOR_POLICY` 的 `eligible` 和 `gate_open` 才能判断“有冷组却被门槛挡住”。
+
+
+### 随机写三次独立短测（诊断专用）
+
+在 ext4 目录运行 `bash reproduction/run_write_short_matrix.sh`。脚本自动使用六个全新 FEMU 客机盘，分别对默认策略与诊断性的低空闲借用加固定 donor 策略各运行三次。每轮是 64 作业、4 KiB psync 随机写、40 秒、空盘起始，不含论文要求的读预热；结束后输出 `matrix.csv`、二进制 SHA-256、每轮方法记录、fio 原始 JSON、逐秒日志、QEMU 日志与验证结果。若任一轮非零退出、验证失败、二进制哈希改变或启用借用的轮次没有联合 GC，应判为**异常或未覆盖机制**，不能挑其余成功轮次直接作论文结果。
+
+2026-09-29 的六轮实际记录见 `WRITE_REPAIR_PROGRESS_2026-09-29.zh-CN.md` 第五轮。该对照的低空闲放行与固定 donor 都是论文未公开的实现选择，**仅用于定位代码瓶颈**。这些轮次没有主机读回与六轮预热，物理身份审计只覆盖被访问/搬迁的路径；通过不能替代正式正确性或图 14 验收。

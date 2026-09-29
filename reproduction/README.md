@@ -14,3 +14,7 @@ python3 reproduction/validate_cross_group.py reproduction/evidence/rand64
 ```
 
 The experiment runner, base guest image, and full FEMU build environment live in the separate local FEMU reproduction workspace. This repository alone is a source and evidence snapshot, not a bootable VM image.
+
+## Detailed repair plan (2026-09-29)
+
+See the [implementation and acceptance plan](WRITE_REPAIR_EXECUTION_PLAN_2026-09-29.zh-CN.md) for the remaining work, dependencies, correctness gates, experiment matrix, collected data, and completion criteria. This is a plan; the new implementation and test runners described there have not been executed.

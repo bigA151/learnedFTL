@@ -1,6 +1,6 @@
 --- a/hw/femu/bbssd/ld-tpftl.c
 +++ b/hw/femu/bbssd/ld-tpftl.c
-@@ -22,8 +22,179 @@
+@@ -22,8 +22,182 @@
  // static int hit_num = 0;
  // static int gc_num = 0;
  // static int gc_line_num = 0;
@@ -73,8 +73,9 @@
 +static int cg_borrow_min_free = 8192;
 +static int cg_pair_trigger = 8192;
 +static int cg_donor_limit = 256;
-+static bool cg_allow_multi;
-+static uint64_t cg_paired_gc;
++static int cg_test_budget_free = -1, cg_test_fail_target_at = -1;
++static bool cg_allow_multi, cg_allow_low_free, cg_borrow_sticky, cg_in_migration;
++static uint64_t cg_paired_gc, cg_seq_model_inits;
 +static uint64_t cg_reason_high, cg_reason_low, cg_reason_no_open;
 +static uint64_t cg_reason_no_room, cg_reason_trained, cg_reason_busy, cg_reason_selected;
 +static uint64_t cg_gate_with_candidate;
@@ -88,6 +89,7 @@
 +    memset(&gc_diag, 0, sizeof(gc_diag));
 +    cg_borrow_attempts = cg_borrow_success = cg_borrow_pages = 0;
 +    cg_paired_gc = 0;
++    cg_in_migration = false;
 +    cg_reason_high = cg_reason_low = cg_reason_no_open = 0;
 +    cg_reason_no_room = cg_reason_trained = cg_reason_busy = cg_reason_selected = 0;
 +    cg_gate_with_candidate = 0;
@@ -156,6 +158,7 @@
 +             cg_reason_busy, cg_reason_selected, cg_gate_with_candidate);
 +    cg_donor_snapshot(ssd);
 +    cg_relation_check(ssd, "after-fio");
++    femu_log("CG_SEQ_MODEL_INIT count=%" PRIu64 "\n", cg_seq_model_inits);
 +    femu_log("PHYS_ID_SUMMARY writes=%" PRIu64 " copies=%" PRIu64 " reads=%" PRIu64 "\n", phys_audit_writes, phys_audit_copies, phys_audit_reads);
 +    femu_log("MODEL_BITMAP_AUDIT attempts=%" PRIu64 " exact=%" PRIu64 " wrong=%" PRIu64 "\n", model_bitmap_attempt, model_bitmap_exact, model_bitmap_wrong);
 +    femu_log("GC_DIAG calls=%" PRIu64 " wp=%" PRIu64
@@ -181,7 +184,7 @@
  // static int train_num = 0;
  
  // static FILE* gc_fp;
-@@ -222,6 +393,51 @@
+@@ -222,6 +396,51 @@
      uint64_t pgidx = ppa2pgidx(ssd, ppa);
  
      ssd->rmap[pgidx] = lpn;
@@ -233,7 +236,7 @@
  }
  
  static inline int victim_line_cmp_pri(pqueue_pri_t next, pqueue_pri_t curr)
-@@ -295,6 +511,9 @@
+@@ -295,6 +514,9 @@
  {
      struct line_mgmt *lm = &ssd->lm;
      struct line *curline = NULL;
@@ -243,7 +246,7 @@
      
      if (gc_flag) {
          if (lm->free_line_cnt < free_line_threshold) {
-@@ -318,11 +537,15 @@
+@@ -318,11 +540,15 @@
  
      curline = QTAILQ_FIRST(&lm->free_line_list);
      if (!curline) {
@@ -259,7 +262,7 @@
  
      /* wpp->curline is always our next-to-write super-block */
      wpp->curline = curline;
-@@ -332,6 +555,12 @@
+@@ -332,6 +558,12 @@
      wpp->blk = curline->id;
      wpp->pl = 0;
      ssd->line2write_pointer[wpp->curline->id] = wpp;
@@ -272,7 +275,7 @@
      if (&ssd->trans_wp == wpp) {
          wpp->curline->type = GTD;
      } else {
-@@ -354,6 +583,33 @@
+@@ -354,6 +586,49 @@
      
      
      ssd->gtd_wps = g_malloc0(sizeof(struct write_pointer) * ssd->sp.tt_line_wps);
@@ -296,6 +299,8 @@
 +        cg_pair_trigger = value;
 +    }
 +    cg_allow_multi = getenv("CG_BORROW_ALLOW_MULTI") != NULL;
++    cg_allow_low_free = getenv("CG_ALLOW_LOW_FREE") != NULL;
++    cg_borrow_sticky = getenv("CG_BORROW_STICKY") != NULL;
 +    const char *limit_text = getenv("CG_BORROW_DONOR_LIMIT");
 +    if (limit_text) {
 +        char *end = NULL;
@@ -303,12 +308,28 @@
 +        if (*end || value < 1 || value > ssd->sp.tt_line_wps) abort();
 +        cg_donor_limit = value;
 +    }
++    const char *budget_text = getenv("CG_TEST_BUDGET_FREE");
++    if (budget_text) {
++        char *end = NULL;
++        long value = strtol(budget_text, &end, 10);
++        if (*end || value < 0 || value > ssd->sp.tt_lines) abort();
++        cg_test_budget_free = value;
++    }
++    const char *fail_target_text = getenv("CG_TEST_FAIL_TARGET_AT");
++    if (fail_target_text) {
++        char *end = NULL;
++        long value = strtol(fail_target_text, &end, 10);
++        if (*end || value < 0 || value >= ssd->sp.tt_line_wps) abort();
++        cg_test_fail_target_at = value;
++    }
      
      for (int i = 0; i < 240; i++) {
          ssd->gtd_wps[i].curline = NULL;
-@@ -441,12 +697,14 @@
+@@ -440,13 +715,16 @@
+ // }
  
  static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
++    if (cg_in_migration) return false;
      struct line_mgmt *lm = &ssd->lm;
 +    gc_diag.calls++;
      printf("GC happens?\n");
@@ -321,7 +342,7 @@
          // if (wpp->id != 256) {
          //     printf("line %d do batch gc\n", wpp->id);
          // }
-@@ -467,11 +725,13 @@
+@@ -467,11 +745,13 @@
          return true;
          
      } else if (ssd->trans_wp.vic_cnt >= gc_threshold) {
@@ -335,7 +356,7 @@
  
          init_line_write_pointer(ssd, &ssd->trans_wp, false);
  
-@@ -480,7 +740,8 @@
+@@ -480,7 +760,8 @@
          // * put this line to the victim lines the line write pointer belongs to
          batch_gtd_do_gc(ssd, true, &ssd->trans_wp, ssd->trans_wp.vic_cnt, NULL);
  
@@ -345,7 +366,7 @@
  
          struct line *tvl = QTAILQ_FIRST(&lm->victim_list);
          struct write_pointer *write_back_wp = NULL;
-@@ -490,20 +751,25 @@
+@@ -490,20 +771,25 @@
          // QTAILQ_REMOVE(&lm->victim_list, vl, entry);
          // int max_vic = 1;
          if (lm->free_line_cnt < free_line_threshold) {
@@ -373,17 +394,18 @@
                  }
 -
 -                tvl = tvl->entry.tqe_next;
-             }
+-            }
 -            if (!tvl) {
 -                tvl = QTAILQ_FIRST(&lm->victim_list);
 -                write_back_wp = ssd->line2write_pointer[tvl->id];
 -            }
++            }
 +            if (!vl) return false;
 +            tvl = vl;
              if (write_back_wp->vic_cnt == 1) {
                  printf("???\n");
              }
-@@ -537,10 +803,12 @@
+@@ -537,10 +823,12 @@
                          return true;
                      }
                  } else {
@@ -397,7 +419,7 @@
                      }
                      init_line_write_pointer(ssd, write_back_wp, false);
                      // write_back_wp->vic_cnt++;
-@@ -576,6 +844,7 @@
+@@ -576,6 +864,7 @@
          
  
      }
@@ -405,7 +427,7 @@
      return false;
  }
  
-@@ -643,12 +912,17 @@
+@@ -643,12 +932,17 @@
                  
                  wpp->pg = 0;
  
@@ -425,7 +447,7 @@
  
                  // TODO: do the group-borrow work here;
                  // bool res = borrow_or_gc(ssd, wpp);
-@@ -806,7 +1080,7 @@
+@@ -806,7 +1100,7 @@
      printf("total pages: %d\n", spp->tt_line_wps);
  
      spp->tt_gtd_size = spp->tt_pgs / spp->ents_per_pg;
@@ -434,7 +456,7 @@
      spp->enable_request_prefetch = true;    /* cannot set false! */
      spp->enable_select_prefetch = true;
  
-@@ -957,6 +1231,7 @@
+@@ -957,6 +1251,7 @@
      for (int i = 0; i < spp->tt_pgs; i++) {
          ssd->rmap[i] = INVALID_LPN;
      }
@@ -442,7 +464,7 @@
  }
  
  static void ssd_init_bitmap(struct ssd *ssd) {
-@@ -1168,6 +1443,8 @@
+@@ -1168,6 +1463,8 @@
  
      case NAND_WRITE:
          ssd->stat.write_num++;
@@ -451,7 +473,19 @@
          /* write: transfer data through channel first */
          nand_stime = (lun->next_lun_avail_time < cmd_stime) ? cmd_stime : \
                       lun->next_lun_avail_time;
-@@ -1906,6 +2183,7 @@
+@@ -1900,12 +2197,19 @@
+ 
+     // new_ppa = get_new_page(ssd);
+     *new_ppa = get_new_line_page(ssd, wpp);
++    struct ppa old_ppa = get_maptbl_ent(ssd, lpn);
++    if (mapped_ppa(&old_ppa) && valid_ppa(ssd, &old_ppa) &&
++        get_pg(ssd, &old_ppa)->status == PG_VALID) {
++        mark_page_invalid(ssd, &old_ppa);
++        set_rmap_ent(ssd, INVALID_LPN, &old_ppa);
++    }
+     /* update maptbl */
+     set_maptbl_ent(ssd, lpn, new_ppa);
+     /* update rmap */
      set_rmap_ent(ssd, lpn, new_ppa);
  
      mark_page_valid(ssd, new_ppa);
@@ -459,7 +493,7 @@
  
      /* need to advance the write pointer here */
      // ssd_advance_write_pointer(ssd);
-@@ -1961,12 +2239,17 @@
+@@ -1961,12 +2265,17 @@
      line->vpc = 0;
      line->rest = ssd->sp.pgs_per_line;
      /* move this line to free line list */
@@ -477,7 +511,20 @@
  }
  
  static uint64_t gc_translation_page_write(struct ssd *ssd, struct ppa *old_ppa)
-@@ -2149,7 +2432,44 @@
+@@ -2134,6 +2443,12 @@
+ 
+             struct nand_lun *lunp = get_lun(ssd, &ppa);
+             mark_block_free(ssd, &ppa);
++            for (int ep = 0; ep < spp->pgs_per_blk; ep++) {
++                ppa.g.pg = ep;
++                uint64_t idx = ppa2pgidx(ssd, &ppa);
++                phys_audit_lpn[idx] = INVALID_LPN;
++                phys_audit_gen[idx] = 0;
++            }
+ 
+             if (spp->enable_gc_delay) {
+                 struct nand_cmd gce;
+@@ -2149,7 +2464,44 @@
      }
  }
  
@@ -523,7 +570,7 @@
      const int parallel = ssd->sp.tt_luns;
      struct ssdparams *spp = &ssd->sp;
      struct nand_lun *lunp;
-@@ -2175,14 +2495,14 @@
+@@ -2175,14 +2527,14 @@
                  ppa.g.pg = pg;
                  pg_iter = get_pg(ssd, &ppa);
                  /* there shouldn't be any free page in victim blocks */
@@ -541,7 +588,7 @@
  
                      // * check if there is invalid page
                      // if (group_gtd_index[gtd_index_loc] >= 512) {
-@@ -2193,7 +2513,7 @@
+@@ -2193,7 +2545,7 @@
                      //     }
                      // }
  
@@ -550,7 +597,7 @@
  
                      gc_read_page(ssd, &ppa);
                      cnt++;
-@@ -2201,6 +2521,12 @@
+@@ -2201,6 +2553,12 @@
              }
              
              mark_block_free(ssd, &ppa);
@@ -563,7 +610,7 @@
              
              if (spp->enable_gc_delay) {
                  struct nand_cmd gce;
-@@ -2261,6 +2587,7 @@
+@@ -2261,6 +2619,7 @@
          for (int pgi = 0; pgi < group_gtd_index[i]; pgi++) {
              struct ppa tmp_ppa;
              gc_write_page_through_line_wp(ssd, group_gtd_lpns[i][pgi], &tmp_ppa, wpp);
@@ -571,7 +618,7 @@
              train_vppns[i][pgi] = ppa2vppn(ssd, &tmp_ppa);
          }
  
-@@ -2273,6 +2600,7 @@
+@@ -2273,6 +2632,7 @@
  
  
          if (group_gtd_index[i] > TRAIN_THRESHOLD) {
@@ -579,7 +626,7 @@
  
  
              // * prepare the training arrays
-@@ -2371,16 +2699,53 @@
+@@ -2371,16 +2731,53 @@
      }
  }
  
@@ -637,7 +684,7 @@
      struct wp_lines *wpl = wpp->wpl->next;
      struct line *victim_line;
      int cnt = 0;
-@@ -2399,7 +2764,7 @@
+@@ -2399,7 +2796,7 @@
          ssd->stat.wp_victims[wpp->id]++;
          ssd->stat.line_wp_gc_times++;
          // fprintf(gc_fp, "%ld\n",counter);
@@ -646,7 +693,7 @@
  
          wpl = wpl->next;
          mark_line_free(ssd, &ppa);
-@@ -2410,7 +2775,8 @@
+@@ -2410,7 +2807,8 @@
      
      
  
@@ -656,7 +703,7 @@
      /* update line status */
      
  
-@@ -2434,23 +2800,15 @@
+@@ -2434,23 +2832,15 @@
                victim_line->ipc, ssd->lm.victim_line_cnt, ssd->lm.full_line_cnt,
                ssd->lm.free_line_cnt);
  
@@ -685,7 +732,7 @@
  
      return 0;
  }
-@@ -2586,6 +2944,15 @@
+@@ -2586,6 +2976,15 @@
                  if (ssd->model_used){
                      
                      bool f = model_predict(ssd, lpn, &ppa);
@@ -701,7 +748,7 @@
  
                      if (f) {
                          goto ssd_read_latency;
-@@ -2618,6 +2985,10 @@
+@@ -2618,6 +3017,10 @@
  
  
      ssd_read_latency:
@@ -712,7 +759,7 @@
  
          if (!mapped_ppa(&ppa) || !valid_ppa(ssd, &ppa)) {
              ssd->stat.access_cnt--;
-@@ -2637,6 +3008,285 @@
+@@ -2637,6 +3040,392 @@
      }
      // ssd->stat.read_time += (maxlat + (time2.tv_sec - time1.tv_sec)*1000000000 + (time2.tv_nsec - time1.tv_nsec));
      return maxlat;
@@ -781,6 +828,14 @@
 +                 hot->id, cg_donor_hot[hot->id]);
 +        abort();
 +    }
++    if (cg_allow_multi && cg_borrow_sticky && cg_hot_donor[hot->id] >= 0) {
++        struct write_pointer *pinned = &ssd->gtd_wps[cg_hot_donor[hot->id]];
++        if (cg_donor_candidate(pinned, hot)) {
++            cg_reason_selected++;
++            return pinned;
++        }
++        cg_hot_donor[hot->id] = -1;
++    }
 +    if (!cg_allow_multi && cg_hot_donor[hot->id] >= 0) {
 +        struct write_pointer *pinned = &ssd->gtd_wps[cg_hot_donor[hot->id]];
 +        if (!pinned->curline || pinned->curline->rest <= 0 ||
@@ -805,7 +860,7 @@
 +        if (best) cg_gate_with_candidate++;
 +        return NULL;
 +    }
-+    if (ssd->lm.free_line_cnt <= 32) {
++    if (ssd->lm.free_line_cnt <= 32 && !cg_allow_low_free) {
 +        cg_reason_low++;
 +        if (best) cg_gate_with_candidate++;
 +        return NULL;
@@ -834,7 +889,7 @@
 +    femu_log("CG_DONOR_POLICY free=%d open=%" PRIu64 " room=%" PRIu64
 +             " eligible=%" PRIu64 " eligible_pages=%" PRIu64
 +             " gate_open=%d\n", ssd->lm.free_line_cnt, open, room,
-+             eligible, pages, ssd->lm.free_line_cnt > 32 &&
++             eligible, pages, (ssd->lm.free_line_cnt > 32 || cg_allow_low_free) &&
 +             ssd->lm.free_line_cnt <= 128);
 +}
 +
@@ -871,7 +926,9 @@
 +    for (int line = 0; line < ssd->sp.tt_lines; line++)
 +        line_count += lines[line];
 +    uint64_t group_live[256] = {0};
++    uint8_t *gtd_seen = g_malloc0(ssd->sp.tt_gtd_size);
 +    uint64_t live_pages = 0, estimate = 0;
++    uint64_t staged_gtds = 0;
 +    /* A shared line may contain data from several groups. Count each valid
 +     * physical page by its reverse-mapped LPN, then round capacity separately
 +     * for every target write pointer. Rounding only the aggregate can reserve
@@ -898,6 +955,11 @@
 +                                 " group=%d\n", line, lpn, group);
 +                        abort();
 +                    }
++                    int gtd = lpn / ssd->sp.ents_per_pg;
++                    if (!gtd_seen[gtd]) {
++                        gtd_seen[gtd] = 1;
++                        staged_gtds++;
++                    }
 +                    group_live[group]++;
 +                    line_live++;
 +                }
@@ -907,6 +969,16 @@
 +            abort();
 +        }
 +        live_pages += line_live;
++    }
++    uint64_t staging_bytes = sizeof(struct gc_gtd_buffer) +
++        (uint64_t)ssd->sp.tt_gtd_size * (sizeof(uint64_t *) + sizeof(int)) +
++        staged_gtds * ssd->sp.ents_per_pg * sizeof(uint64_t);
++    g_free(gtd_seen);
++    femu_log("CG_STAGE_BUDGET gtds=%" PRIu64 " bytes=%" PRIu64
++             " limit=%d\n", staged_gtds, staging_bytes, 16 << 20);
++    if (staging_bytes > (16ULL << 20)) {
++        femu_log("CG_STAGE_LIMIT bytes=%" PRIu64 "\n", staging_bytes);
++        abort();
 +    }
 +    int reserve_lines = 0;
 +    for (int group = 0; group < ssd->sp.tt_line_wps; group++) {
@@ -921,12 +993,25 @@
 +    }
 +    femu_log("CG_COMPONENT hot=%d donor=%d groups=%d lines=%d\n",
 +             hot, donor, group_count, line_count);
++    for (int line = 0; line < ssd->sp.tt_lines; line++) {
++        if (!lines[line]) continue;
++        int members = 0;
++        for (int word = 0; word < 4; word++)
++            members += __builtin_popcountll(cg_line_groups[line][word]);
++        if (members >= 3)
++            femu_log("CG_SHARED_LINE line=%d owner=%d members=%d\n",
++                     line, ssd->line2write_pointer[line] ?
++                     ssd->line2write_pointer[line]->id : -1, members);
++    }
++    int screen_free = cg_test_budget_free >= 0 ? cg_test_budget_free :
++                      ssd->lm.free_line_cnt;
 +    femu_log("CG_BUDGET free=%d live_pages=%" PRIu64
-+             " estimate_pages=%" PRIu64 " reserve_lines=%d\n",
-+             ssd->lm.free_line_cnt, live_pages, estimate, reserve_lines);
-+    if (ssd->lm.free_line_cnt < reserve_lines) {
-+        femu_log("CG_BUDGET_REJECT free=%d need=%d\n",
-+                 ssd->lm.free_line_cnt, reserve_lines);
++             " estimate_pages=%" PRIu64 " reserve_lines=%d actual_free=%d\n",
++             screen_free, live_pages, estimate, reserve_lines,
++             ssd->lm.free_line_cnt);
++    if (screen_free < reserve_lines) {
++        femu_log("CG_BUDGET_REJECT free=%d actual_free=%d need=%d\n",
++                 screen_free, ssd->lm.free_line_cnt, reserve_lines);
 +        abort();
 +    }
 +    *group_count_out = group_count;
@@ -942,6 +1027,38 @@
 +    cg_hot_closed[hot->id] = 1;
 +}
 +
++static void cg_stage_line_valid_data(struct ssd *ssd, int line_id,
++                                     struct gc_gtd_buffer *buffer)
++{
++    struct ppa ppa = { .ppa = 0 };
++    ppa.g.blk = line_id;
++    uint64_t found = 0;
++    for (int ch = 0; ch < ssd->sp.nchs; ch++)
++        for (int lun = 0; lun < ssd->sp.luns_per_ch; lun++)
++            for (int pg = 0; pg < ssd->sp.pgs_per_blk; pg++) {
++                ppa.g.ch = ch;
++                ppa.g.lun = lun;
++                ppa.g.pg = pg;
++                ppa.g.pl = 0;
++                if (get_pg(ssd, &ppa)->status != PG_VALID) continue;
++                uint64_t lpn = get_rmap_ent(ssd, &ppa);
++                if (!valid_lpn(ssd, lpn)) {
++                    femu_log("CG_STAGE_BAD_RMAP line=%d lpn=%" PRIu64 "\n",
++                             line_id, lpn);
++                    abort();
++                }
++                phys_audit_capture(ssd, lpn, &ppa);
++                gc_gtd_buffer_add(ssd, buffer, lpn);
++                gc_read_page(ssd, &ppa);
++                found++;
++            }
++    if (found != ssd->lm.lines[line_id].vpc) {
++        femu_log("CG_STAGE_VPC line=%d found=%" PRIu64 " vpc=%d\n",
++                 line_id, found, ssd->lm.lines[line_id].vpc);
++        abort();
++    }
++}
++
 +static void cg_reclaim_pair(struct ssd *ssd, struct write_pointer *hot,
 +                            struct write_pointer *donor)
 +{
@@ -950,31 +1067,68 @@
 +    if (!hot->curline || !donor->curline || !cg_hot_closed[hot->id]) abort();
 +    cg_component_check(ssd, hot->id, donor->id, groups, lines,
 +                       &group_count, &line_count);
-+    /* Snapshot the complete component before mutating any owner pointer. */
++    /* Keep source pages mapped until every destination is programmed. The
++     * FTL thread is serialized, and nested GC is disabled during this plan. */
++    cg_in_migration = true;
 +    struct gc_gtd_buffer *buffer = gc_gtd_buffer_new(ssd);
++    int allocated_targets = 0;
 +    for (int group = 0; group < ssd->sp.tt_line_wps; group++) {
 +        if (!groups[group]) continue;
 +        struct write_pointer *wp = &ssd->gtd_wps[group];
++        /* A void allocator must not leave the old source pointer looking like
++         * a successful destination when no free line is available. */
++        wp->curline = NULL;
++        if (cg_test_fail_target_at == allocated_targets) {
++            femu_log("CG_TARGET_ALLOC_INJECT group=%d allocated=%d\n",
++                     group, allocated_targets);
++            abort();
++        }
 +        init_line_write_pointer(ssd, wp, false);
-+        if (!wp->curline || wp->curline->rest <= 0) abort();
++        if (!wp->curline || wp->curline->rest <= 0) {
++            femu_log("CG_TARGET_ALLOC_FAIL group=%d allocated=%d\n",
++                     group, allocated_targets);
++            abort();
++        }
++        allocated_targets++;
 +    }
-+    /* Every source line is visited once. Collect all valid LPNs into a
-+     * full-GTD buffer before training any of the component's models. */
++    for (int line_id = 0; line_id < ssd->sp.tt_lines; line_id++) {
++        if (!lines[line_id]) continue;
++        struct write_pointer *owner = ssd->line2write_pointer[line_id];
++        if (!owner || !groups[owner->id]) {
++            femu_log("CG_COMPONENT_BAD_OWNER line=%d\n", line_id);
++            abort();
++        }
++        cg_stage_line_valid_data(ssd, line_id, buffer);
++    }
++    model_training_groups(ssd, buffer);
++    for (int gtd = 0; gtd < ssd->sp.tt_gtd_size; gtd++)
++        for (int i = 0; i < buffer->counts[gtd]; i++)
++            if (phys_audit_pending[buffer->lpns[gtd][i]]) {
++                femu_log("CG_PENDING_COPY gtd=%d lpn=%" PRIu64 "\n",
++                         gtd, buffer->lpns[gtd][i]);
++                abort();
++            }
++    gc_gtd_buffer_free(ssd, buffer);
++    femu_log("CG_COPY_DONE groups=%d lines=%d copied_total=%" PRIu64 "\n",
++             group_count, line_count, phys_audit_copies);
++    /* Source erase is the final step, after mapping/model update and a
++     * zero-valid-page check for every source line. */
 +    for (int line_id = 0; line_id < ssd->sp.tt_lines; line_id++) {
 +        if (!lines[line_id]) continue;
 +        struct line *source = &ssd->lm.lines[line_id];
 +        struct write_pointer *owner = ssd->line2write_pointer[line_id];
 +        struct ppa ppa = { .ppa = 0 };
 +        ppa.g.blk = line_id;
-+        if (!owner || !groups[owner->id]) {
-+            femu_log("CG_COMPONENT_BAD_OWNER line=%d\n", line_id);
++        if (source->vpc != 0) {
++            femu_log("CG_SOURCE_STILL_VALID line=%d vpc=%d\n",
++                     line_id, source->vpc);
 +            abort();
 +        }
 +        if (!gc_diag_victim_contains(ssd, source)) {
 +            QTAILQ_INSERT_TAIL(&ssd->lm.victim_list, source, entry);
 +            ssd->lm.victim_line_cnt++;
 +        }
-+        gc_read_all_valid_data(ssd, &ppa, buffer);
++        free_all_blocks(ssd, &ppa);
 +        clear_one_write_pointer_victim_lines(owner->wpl, source);
 +        owner->vic_cnt--;
 +        ssd->stat.gc_times++;
@@ -983,8 +1137,8 @@
 +        ssd->stat.line_wp_gc_times++;
 +        mark_line_free(ssd, &ppa);
 +    }
-+    model_training_groups(ssd, buffer);
-+    gc_gtd_buffer_free(ssd, buffer);
++    cg_in_migration = false;
++    femu_log("CG_ERASE_DONE lines=%d\n", line_count);
 +    for (int group = 0; group < ssd->sp.tt_line_wps; group++) {
 +        if (!groups[group]) continue;
 +        cg_hot_donor[group] = -1;
@@ -998,7 +1152,17 @@
  }
  
  static uint64_t ssd_write(struct ssd *ssd, NvmeRequest *req)
-@@ -2667,10 +3317,8 @@
+@@ -2652,7 +3441,8 @@
+     struct ppa ppa;
+     uint64_t lpn;
+     uint64_t curlat = 0, maxlat = 0;
+-    int sequence_cnt = 0;
++    uint64_t seq_first_vppn = 0, seq_prev_vppn = 0;
++    bool seq_linear = true;
+ 
+     if (end_lpn >= spp->tt_pgs) {
+         ftl_err("start_lpn=%"PRIu64",tt_pgs=%d\n", start_lpn, ssd->sp.tt_pgs);
+@@ -2667,10 +3457,8 @@
  
          ftl_assert(wp_index == ssd->sp.tt_lines-1);
  
@@ -1011,7 +1175,7 @@
          
          cmt_entry = cmt_hit(ssd, lpn);
          if (cmt_entry) {
-@@ -2694,19 +3342,38 @@
+@@ -2694,19 +3482,42 @@
          }
  
          struct write_pointer *lwp= &ssd->gtd_wps[wp_index];
@@ -1053,10 +1217,14 @@
  
          mark_page_valid(ssd, &ppa);
 +        phys_audit_host(ssd, lpn, &ppa);
++        uint64_t seq_vppn = ppa2vppn(ssd, &ppa);
++        if (lpn == start_lpn) seq_first_vppn = seq_vppn;
++        else if (seq_vppn != seq_prev_vppn + 1) seq_linear = false;
++        seq_prev_vppn = seq_vppn;
  
          struct nand_cmd swr;
          swr.type = USER_IO;
-@@ -2715,6 +3382,8 @@
+@@ -2715,43 +3526,51 @@
          /* get latency statistics */
          curlat = ssd_advance_status(ssd, &ppa, &swr);
          maxlat = (curlat > maxlat) ? curlat : maxlat;
@@ -1065,3 +1233,79 @@
          // clock_gettime(CLOCK_MONOTONIC, &time2);
      }
  
+-    // * simulate the model sequential initalization
+-    // TODO: 如果顺序写长度大于学习模型中该范围的分段函数的有效长度，那么就取代它
+-    if (ssd->model_used) {
+-        sequence_cnt = end_lpn - start_lpn;
+-        int gtd_index = lpn/spp->ents_per_pg;
+-        lr_node lrn = ssd->lr_nodes[gtd_index];
+-        if (lrn.u) {
+-            // * this model has been trained, try to find if this sequential write is longer than any segments
++    /* A fresh, untrained model can represent a verified contiguous run. */
++    if (ssd->model_used && end_lpn > start_lpn && seq_linear &&
++        start_lpn / spp->ents_per_pg == end_lpn / spp->ents_per_pg) {
++        int gtd = start_lpn / spp->ents_per_pg;
++        lr_node *model = &ssd->lr_nodes[gtd];
++        bool unused = true;
++        for (int j = 0; j < MAX_INTERVALS; j++)
++            if (model->brks[j].valid_cnt) unused = false;
++        if (unused) {
++            for (uint64_t page = start_lpn; page <= end_lpn; page++) {
++                struct ppa actual = get_maptbl_ent(ssd, page);
++                if (!mapped_ppa(&actual) || !valid_ppa(ssd, &actual) ||
++                    ppa2vppn(ssd, &actual) != seq_first_vppn + page - start_lpn) {
++                    unused = false;
++                    break;
++                }
++            }
++        }
++        if (unused) {
++            int count = end_lpn - start_lpn + 1;
++            uint64_t gtd_first = (uint64_t)gtd * spp->ents_per_pg;
++            for (uint64_t page = gtd_first;
++                 page < gtd_first + spp->ents_per_pg; page++)
++                ssd->bitmaps[page] = 0;
++            model->start_lpn = start_lpn;
++            model->start_ppa = seq_first_vppn;
+             for (int j = 0; j < MAX_INTERVALS; j++) {
+-                if (lrn.brks[j].key >= start_lpn && lrn.brks[j].valid_cnt < sequence_cnt) {
+-
+-                    // * modify this model
+-                    lr_breakpoint* brk = &lrn.brks[j];
+-                    brk->b = 0;
+-                    brk->w = 1;
+-                    brk->key = start_lpn;
+-                    brk->valid_cnt = sequence_cnt;
+-
+-
+-                    // * modifiy the next model 
+-                    if (j != MAX_INTERVALS-1 && lrn.brks[j+1].key < end_lpn) {
+-                        lrn.brks[j+1].key = end_lpn;
+-                        lrn.brks[j+1].valid_cnt -= (end_lpn - lrn.brks[j+1].key);
+-                    }
+-
+-
+-                    // * mark the bitmap valid
+-                    for (int j = start_lpn; j < end_lpn; j++)
+-                        ssd->bitmaps[j] = 1;
+-
+-                }
+-            }
+-        }
+-
++                model->brks[j].w = 1;
++                model->brks[j].b = 0;
++                model->brks[j].key = count - 1;
++                model->brks[j].valid_cnt = j == 0 ? count : 0;
++            }
++            model->u = 1;
++            model->less = 0;
++            model->success_ratio = 1.0;
++            for (uint64_t page = start_lpn; page <= end_lpn; page++)
++                ssd->bitmaps[page] = 1;
++            cg_group_trained[gtd / spp->trans_per_line] = 1;
++            cg_seq_model_inits++;
++        }
+     }
+ 
+     // ssd->stat.write_time += (maxlat + (time2.tv_sec - time1.tv_sec)*1000000000 + (time2.tv_nsec - time1.tv_nsec));

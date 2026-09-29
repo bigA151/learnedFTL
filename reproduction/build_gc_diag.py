@@ -318,6 +318,14 @@ static void phys_audit_move(struct ssd *ssd, uint64_t lpn, struct ppa *ppa)
             c = once(c, "        ssd->rmap[i] = INVALID_LPN;\n    }\n}", "        ssd->rmap[i] = INVALID_LPN;\n    }\n    phys_audit_init(ssd);\n}")
             c = once(c, "                    tmp_lpn = get_rmap_ent(ssd, &ppa);", "                    tmp_lpn = get_rmap_ent(ssd, &ppa);\n                    phys_audit_capture(ssd, tmp_lpn, &ppa);")
             c = once(c, "            mark_block_free(ssd, &ppa);\n            \n            if (spp->enable_gc_delay)", "            mark_block_free(ssd, &ppa);\n            for (int ep = 0; ep < spp->pgs_per_blk; ep++) {\n                ppa.g.pg = ep;\n                uint64_t idx = ppa2pgidx(ssd, &ppa);\n                phys_audit_lpn[idx] = INVALID_LPN;\n                phys_audit_gen[idx] = 0;\n            }\n            \n            if (spp->enable_gc_delay)")
+            c = once(c, "            mark_block_free(ssd, &ppa);\n\n            if (spp->enable_gc_delay)",
+                     "            mark_block_free(ssd, &ppa);\n"
+                     "            for (int ep = 0; ep < spp->pgs_per_blk; ep++) {\n"
+                     "                ppa.g.pg = ep;\n"
+                     "                uint64_t idx = ppa2pgidx(ssd, &ppa);\n"
+                     "                phys_audit_lpn[idx] = INVALID_LPN;\n"
+                     "                phys_audit_gen[idx] = 0;\n"
+                     "            }\n\n            if (spp->enable_gc_delay)")
             c = once(c, "    mark_page_valid(ssd, new_ppa);\n\n    /* need to advance", "    mark_page_valid(ssd, new_ppa);\n    phys_audit_move(ssd, lpn, new_ppa);\n\n    /* need to advance")
             c = once(c, "        mark_page_valid(ssd, &ppa);\n\n        struct nand_cmd swr;", "        mark_page_valid(ssd, &ppa);\n        phys_audit_host(ssd, lpn, &ppa);\n\n        struct nand_cmd swr;")
             c = once(c, "    ssd_read_latency:\n", "    ssd_read_latency:\n        if (mapped_ppa(&ppa) && valid_ppa(ssd, &ppa)) {\n            phys_audit_check(ssd, lpn, &ppa, \"host-read\");\n            phys_audit_reads++;\n        }\n")

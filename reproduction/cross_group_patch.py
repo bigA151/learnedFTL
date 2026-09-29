@@ -268,18 +268,55 @@ static void cg_component_check(struct ssd *ssd, int hot, int donor,
         group_count += groups[group];
     for (int line = 0; line < ssd->sp.tt_lines; line++)
         line_count += lines[line];
-    uint64_t live_pages = 0;
-    for (int line = 0; line < ssd->sp.tt_lines; line++)
-        if (lines[line]) live_pages += ssd->lm.lines[line].vpc;
-    /* Conservative screening bound for the connected component: data pages
-     * plus up to one translation page per GTD per source line. It is not yet
-     * a simulation of the full migration schedule. */
-    uint64_t estimate = live_pages +
-        (uint64_t)group_count * line_count * ssd->sp.trans_per_line;
-    int reserve_lines = (estimate + ssd->sp.pgs_per_line - 1) /
-                        ssd->sp.pgs_per_line;
-    if (reserve_lines < group_count) reserve_lines = group_count;
-    if (reserve_lines < 2) reserve_lines = 2;
+    uint64_t group_live[256] = {0};
+    uint64_t live_pages = 0, estimate = 0;
+    /* A shared line may contain data from several groups. Count each valid
+     * physical page by its reverse-mapped LPN, then round capacity separately
+     * for every target write pointer. Rounding only the aggregate can reserve
+     * too few lines when one group crosses a line boundary. */
+    for (int line = 0; line < ssd->sp.tt_lines; line++) {
+        if (!lines[line]) continue;
+        uint64_t line_live = 0;
+        struct ppa ppa = { .ppa = 0 };
+        ppa.g.blk = line;
+        for (int ch = 0; ch < ssd->sp.nchs; ch++)
+            for (int lun = 0; lun < ssd->sp.luns_per_ch; lun++)
+                for (int pg = 0; pg < ssd->sp.pgs_per_blk; pg++) {
+                    ppa.g.ch = ch;
+                    ppa.g.lun = lun;
+                    ppa.g.pg = pg;
+                    ppa.g.pl = 0;
+                    if (get_pg(ssd, &ppa)->status != PG_VALID) continue;
+                    uint64_t lpn = get_rmap_ent(ssd, &ppa);
+                    int group = (lpn / ssd->sp.ents_per_pg) /
+                                ssd->sp.trans_per_line;
+                    if (lpn == INVALID_LPN || group >= ssd->sp.tt_line_wps ||
+                        !groups[group]) {
+                        femu_log("CG_BUDGET_BAD_PAGE line=%d lpn=%" PRIu64
+                                 " group=%d\n", line, lpn, group);
+                        abort();
+                    }
+                    group_live[group]++;
+                    line_live++;
+                }
+        if (line_live != ssd->lm.lines[line].vpc) {
+            femu_log("CG_BUDGET_VPC line=%d counted=%" PRIu64
+                     " vpc=%d\n", line, line_live, ssd->lm.lines[line].vpc);
+            abort();
+        }
+        live_pages += line_live;
+    }
+    int reserve_lines = 0;
+    for (int group = 0; group < ssd->sp.tt_line_wps; group++) {
+        if (!groups[group]) continue;
+        uint64_t group_estimate = group_live[group] +
+            (uint64_t)line_count * ssd->sp.trans_per_line;
+        estimate += group_estimate;
+        int needed = (group_estimate + ssd->sp.pgs_per_line - 1) /
+                     ssd->sp.pgs_per_line;
+        if (needed < 1) needed = 1;
+        reserve_lines += needed;
+    }
     femu_log("CG_COMPONENT hot=%d donor=%d groups=%d lines=%d\n",
              hot, donor, group_count, line_count);
     femu_log("CG_BUDGET free=%d live_pages=%" PRIu64

@@ -416,6 +416,13 @@ def enable_borrow(source: str) -> str:
                 gc_diag_check(ssd, "advance-victim");''',
         '''                gc_diag_check(ssd, "advance-victim");''')
     source = replace_once(source,
+        '''        // * maintain the consistency of bitmap
+        // if (ssd->bitmaps[lpn] == 1) {
+            // ssd->bitmaps[lpn] = 0;
+        // }''',
+        '        /* An overwrite invalidates any prediction for the old PPA. */\n'
+        '        ssd->bitmaps[lpn] = 0;')
+    source = replace_once(source,
         '        if (group_gtd_index[i] > TRAIN_THRESHOLD) {',
         '''        if (group_gtd_index[i] > TRAIN_THRESHOLD) {
             cg_group_trained[(start_gtd + i) / ssd->sp.trans_per_line] = 1;''')

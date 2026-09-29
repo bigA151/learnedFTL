@@ -563,7 +563,15 @@
              
              if (spp->enable_gc_delay) {
                  struct nand_cmd gce;
-@@ -2273,6 +2599,7 @@
+@@ -2261,6 +2587,7 @@
+         for (int pgi = 0; pgi < group_gtd_index[i]; pgi++) {
+             struct ppa tmp_ppa;
+             gc_write_page_through_line_wp(ssd, group_gtd_lpns[i][pgi], &tmp_ppa, wpp);
++            ssd->bitmaps[group_gtd_lpns[i][pgi]] = 0;
+             train_vppns[i][pgi] = ppa2vppn(ssd, &tmp_ppa);
+         }
+ 
+@@ -2273,6 +2600,7 @@
  
  
          if (group_gtd_index[i] > TRAIN_THRESHOLD) {
@@ -571,7 +579,7 @@
  
  
              // * prepare the training arrays
-@@ -2371,16 +2698,53 @@
+@@ -2371,16 +2699,53 @@
      }
  }
  
@@ -629,7 +637,7 @@
      struct wp_lines *wpl = wpp->wpl->next;
      struct line *victim_line;
      int cnt = 0;
-@@ -2399,7 +2763,7 @@
+@@ -2399,7 +2764,7 @@
          ssd->stat.wp_victims[wpp->id]++;
          ssd->stat.line_wp_gc_times++;
          // fprintf(gc_fp, "%ld\n",counter);
@@ -638,7 +646,7 @@
  
          wpl = wpl->next;
          mark_line_free(ssd, &ppa);
-@@ -2410,7 +2774,8 @@
+@@ -2410,7 +2775,8 @@
      
      
  
@@ -648,7 +656,7 @@
      /* update line status */
      
  
-@@ -2434,23 +2799,15 @@
+@@ -2434,23 +2800,15 @@
                victim_line->ipc, ssd->lm.victim_line_cnt, ssd->lm.full_line_cnt,
                ssd->lm.free_line_cnt);
  
@@ -677,7 +685,7 @@
  
      return 0;
  }
-@@ -2586,6 +2943,15 @@
+@@ -2586,6 +2944,15 @@
                  if (ssd->model_used){
                      
                      bool f = model_predict(ssd, lpn, &ppa);
@@ -693,7 +701,7 @@
  
                      if (f) {
                          goto ssd_read_latency;
-@@ -2618,6 +2984,10 @@
+@@ -2618,6 +2985,10 @@
  
  
      ssd_read_latency:
@@ -704,7 +712,7 @@
  
          if (!mapped_ppa(&ppa) || !valid_ppa(ssd, &ppa)) {
              ssd->stat.access_cnt--;
-@@ -2637,6 +3007,285 @@
+@@ -2637,6 +3008,285 @@
      }
      // ssd->stat.read_time += (maxlat + (time2.tv_sec - time1.tv_sec)*1000000000 + (time2.tv_nsec - time1.tv_nsec));
      return maxlat;
@@ -990,7 +998,7 @@
  }
  
  static uint64_t ssd_write(struct ssd *ssd, NvmeRequest *req)
-@@ -2667,10 +3316,8 @@
+@@ -2667,10 +3317,8 @@
  
          ftl_assert(wp_index == ssd->sp.tt_lines-1);
  
@@ -1003,7 +1011,7 @@
          
          cmt_entry = cmt_hit(ssd, lpn);
          if (cmt_entry) {
-@@ -2694,19 +3341,38 @@
+@@ -2694,19 +3342,38 @@
          }
  
          struct write_pointer *lwp= &ssd->gtd_wps[wp_index];
@@ -1048,7 +1056,7 @@
  
          struct nand_cmd swr;
          swr.type = USER_IO;
-@@ -2715,6 +3381,8 @@
+@@ -2715,6 +3382,8 @@
          /* get latency statistics */
          curlat = ssd_advance_status(ssd, &ppa, &swr);
          maxlat = (curlat > maxlat) ? curlat : maxlat;

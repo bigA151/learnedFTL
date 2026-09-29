@@ -86,6 +86,9 @@ static void model_training_groups(struct ssd *ssd, struct gc_gtd_buffer *b)
 def apply(source: str) -> str:
     source = replace_once(source, 'static void gc_read_all_valid_data(struct ssd *ssd, struct ppa *tppa, uint64_t group_gtd_lpns[][512], int *group_gtd_index, int *start_gtd) {',
                           BUFFER + '\nstatic void gc_read_all_valid_data(struct ssd *ssd, struct ppa *tppa, struct gc_gtd_buffer *buffer) {')
+    source = replace_once(source,
+                          '            gc_write_page_through_line_wp(ssd, group_gtd_lpns[i][pgi], &tmp_ppa, wpp);',
+                          '            gc_write_page_through_line_wp(ssd, group_gtd_lpns[i][pgi], &tmp_ppa, wpp);\n            ssd->bitmaps[group_gtd_lpns[i][pgi]] = 0;')
     source = replace_once(source, '''                    int gtd_index = tmp_lpn/spp->ents_per_pg;
                     *start_gtd = gtd_index - (gtd_index % parallel);      // ! FIXME: 
                     int gtd_index_loc = gtd_index % spp->trans_per_line;    // gtd_index%64''',

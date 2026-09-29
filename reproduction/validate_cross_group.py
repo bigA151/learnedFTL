@@ -24,6 +24,15 @@ for bad in ('PHYS_ID_MISMATCH', 'PHYS_ID_NO_SOURCE', 'GC_EXHAUST',
 borrow = re.search(r'CG_BORROW attempts=(\d+) success=(\d+) pages=(\d+) paired_gc=(\d+)', log)
 identity = re.search(r'PHYS_ID_SUMMARY writes=(\d+) copies=(\d+) reads=(\d+)', log)
 assert borrow and identity, 'missing end-of-run counters'
+model = re.search(r'MODEL_BITMAP_AUDIT attempts=(\d+) exact=(\d+) wrong=(\d+)', log)
+if method.get('assert_model_bitmap'):
+    assert model, 'missing model bitmap audit'
+if model:
+    model_attempts, model_exact, model_wrong = map(int, model.groups())
+    assert model_attempts == model_exact + model_wrong
+    if method.get('assert_model_bitmap'):
+        assert model_attempts > 0 and model_wrong == 0, 'model bitmap claim was not validated'
+
 attempts, success, pages, paired = map(int, borrow.groups())
 writes, copies, reads = map(int, identity.groups())
 assert attempts >= success == pages and writes > 0

@@ -26,6 +26,7 @@ static bool gc_diag_force_fallback;
 static bool gc_diag_skip_once;
 static bool gc_diag_choice_logged;
 static bool gc_diag_gc_busy_wp[512];
+static uint64_t model_bitmap_attempt, model_bitmap_exact, model_bitmap_wrong;
 
 static uint64_t gc_diag_group_invalid_pages(struct write_pointer *wp)
 {
@@ -79,6 +80,7 @@ static void gc_diag_donor_audit(struct ssd *ssd, const char *phase)
 void gc_diag_reset(struct ssd *ssd)
 {
     memset(&gc_diag, 0, sizeof(gc_diag));
+    model_bitmap_attempt = model_bitmap_exact = model_bitmap_wrong = 0;
     gc_diag.min_free = ssd->lm.free_line_cnt;
     gc_diag.min_victim = ssd->lm.victim_line_cnt;
     gc_diag_donor_audit(ssd, "before-fio");
@@ -319,8 +321,19 @@ static void phys_audit_move(struct ssd *ssd, uint64_t lpn, struct ppa *ppa)
             c = once(c, "    mark_page_valid(ssd, new_ppa);\n\n    /* need to advance", "    mark_page_valid(ssd, new_ppa);\n    phys_audit_move(ssd, lpn, new_ppa);\n\n    /* need to advance")
             c = once(c, "        mark_page_valid(ssd, &ppa);\n\n        struct nand_cmd swr;", "        mark_page_valid(ssd, &ppa);\n        phys_audit_host(ssd, lpn, &ppa);\n\n        struct nand_cmd swr;")
             c = once(c, "    ssd_read_latency:\n", "    ssd_read_latency:\n        if (mapped_ppa(&ppa) && valid_ppa(ssd, &ppa)) {\n            phys_audit_check(ssd, lpn, &ppa, \"host-read\");\n            phys_audit_reads++;\n        }\n")
+            c = once(c, "                    bool f = model_predict(ssd, lpn, &ppa);",
+                     "                    bool f = model_predict(ssd, lpn, &ppa);\n"
+                     "                    model_bitmap_attempt++;\n"
+                     "                    if (f) model_bitmap_exact++;\n"
+                     "                    else {\n"
+                     "                        model_bitmap_wrong++;\n"
+                     "                        if (getenv(\"CG_ASSERT_MODEL_BITMAP\")) {\n"
+                     "                            femu_log(\"MODEL_BITMAP_WRONG lpn=%\" PRIu64 \"\\n\", lpn);\n"
+                     "                            abort();\n"
+                     "                        }\n"
+                     "                    }")
             c = once(c, "void gc_diag_report(struct ssd *ssd)\n{", "void gc_diag_report(struct ssd *ssd)\n{")
-            c = once(c, "    gc_diag_donor_audit(ssd, \"after-fio\");", "    gc_diag_donor_audit(ssd, \"after-fio\");\n    femu_log(\"PHYS_ID_SUMMARY writes=%\" PRIu64 \" copies=%\" PRIu64 \" reads=%\" PRIu64 \"\\n\", phys_audit_writes, phys_audit_copies, phys_audit_reads);")
+            c = once(c, "    gc_diag_donor_audit(ssd, \"after-fio\");", "    gc_diag_donor_audit(ssd, \"after-fio\");\n    femu_log(\"PHYS_ID_SUMMARY writes=%\" PRIu64 \" copies=%\" PRIu64 \" reads=%\" PRIu64 \"\\n\", phys_audit_writes, phys_audit_copies, phys_audit_reads);\n    femu_log(\"MODEL_BITMAP_AUDIT attempts=%\" PRIu64 \" exact=%\" PRIu64 \" wrong=%\" PRIu64 \"\\n\", model_bitmap_attempt, model_bitmap_exact, model_bitmap_wrong);")
 
         if force_fallback:
             c = once(c, "                if (tmp_wp->vic_cnt > 1) {",

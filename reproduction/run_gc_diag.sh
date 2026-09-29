@@ -161,7 +161,7 @@ with open(p+'/method.json','w') as f:
             'fio_engine':'psync','fio_pattern':pattern,'fio_jobs':int(jobs),'fio_seconds':int(runtime),
             'fio_filesize_mib':30518,'fio_size_mib':int(__import__('os').environ.get('GC_MEASURE_SIZE_MIB','476')),'prepare_seconds':int(__import__('os').environ.get('GC_PREPARE_SECONDS','0')),'sparse_groups':int(__import__('os').environ.get('GC_PREPARE_SPARSE_GROUPS','0')),'offset_increment':offset_increment_kib+'k',
             'fio_returncode':int(fio_rc),'report_returncode':int(report_rc),
-            'guest_image':image,'pair_trigger':int(__import__('os').environ.get('CG_BORROW_PAIR_TRIGGER','8192')),'post_read':bool(int(__import__('os').environ.get('GC_POST_READ','0')))},f,indent=2)
+            'guest_image':image,'pair_trigger':int(__import__('os').environ.get('CG_BORROW_PAIR_TRIGGER','8192')),'allow_multi':bool(__import__('os').environ.get('CG_BORROW_ALLOW_MULTI')),'donor_limit':int(__import__('os').environ.get('CG_BORROW_DONOR_LIMIT','256')),'post_read':bool(int(__import__('os').environ.get('GC_POST_READ','0'))),'assert_model_bitmap':bool(__import__('os').environ.get('CG_ASSERT_MODEL_BITMAP'))},f,indent=2)
  f.write('\n')
 PY
 echo "Done: $base/$out (fio=$fio_rc, report=$report_rc)"

@@ -265,8 +265,27 @@ static void cg_component_check(struct ssd *ssd, int hot, int donor)
         group_count += groups[group];
     for (int line = 0; line < ssd->sp.tt_lines; line++)
         line_count += lines[line];
+    uint64_t live_pages = 0;
+    for (int line = 0; line < ssd->sp.tt_lines; line++)
+        if (lines[line]) live_pages += ssd->lm.lines[line].vpc;
+    /* Conservative screening bound for this two-group prototype: data pages
+     * plus up to one translation page per GTD per source line. It is not yet
+     * a simulation of the full migration schedule. */
+    uint64_t estimate = live_pages +
+        (uint64_t)group_count * line_count * ssd->sp.trans_per_line;
+    int reserve_lines = (estimate + ssd->sp.pgs_per_line - 1) /
+                        ssd->sp.pgs_per_line;
+    if (reserve_lines < 2) reserve_lines = 2;
     femu_log("CG_COMPONENT hot=%d donor=%d groups=%d lines=%d\n",
              hot, donor, group_count, line_count);
+    femu_log("CG_BUDGET free=%d live_pages=%" PRIu64
+             " estimate_pages=%" PRIu64 " reserve_lines=%d\n",
+             ssd->lm.free_line_cnt, live_pages, estimate, reserve_lines);
+    if (ssd->lm.free_line_cnt < reserve_lines) {
+        femu_log("CG_BUDGET_REJECT free=%d need=%d\n",
+                 ssd->lm.free_line_cnt, reserve_lines);
+        abort();
+    }
     /* The current pair collector handles only two groups. Stop before it
      * mutates queues if the true connected component is wider. */
     if (group_count > 2) {

@@ -17,7 +17,8 @@ log = (p / 'qemu.log').read_text(errors='replace')
 assert method['fio_returncode'] == method['report_returncode'] == fio['error'] == 0
 for bad in ('PHYS_ID_MISMATCH', 'PHYS_ID_NO_SOURCE', 'GC_EXHAUST',
             'GC_BAD_FREE_TARGET', 'GC_INVARIANT', 'GC_GROUP_NO_TARGET',
-            'CG_RELATION_MISMATCH', 'CG_COMPONENT_UNSUPPORTED'):
+            'CG_RELATION_MISMATCH', 'CG_COMPONENT_UNSUPPORTED',
+            'CG_BUDGET_REJECT'):
     assert bad not in log, bad
 borrow = re.search(r'CG_BORROW attempts=(\d+) success=(\d+) pages=(\d+) paired_gc=(\d+)', log)
 identity = re.search(r'PHYS_ID_SUMMARY writes=(\d+) copies=(\d+) reads=(\d+)', log)
@@ -42,6 +43,12 @@ if args.require_borrow:
     assert success > 0, 'borrowing was not exercised'
 if args.require_pair:
     assert paired > 0 and copies > 0, 'paired mixed-line GC was not exercised'
+    components = re.findall(r'CG_COMPONENT hot=(\d+) donor=(\d+) groups=(\d+) lines=(\d+)', log)
+    budgets = re.findall(r'CG_BUDGET free=(\d+) live_pages=(\d+) estimate_pages=(\d+) reserve_lines=(\d+)', log)
+    assert len(components) == len(budgets) == paired, 'missing component or budget preflight'
+    assert all(int(groups) == 2 for _, _, groups, _ in components)
+    assert all(int(free) >= int(reserve) and int(estimate) >= int(live)
+               for free, live, estimate, reserve in budgets)
 if method.get('post_read'):
     targets = {'post-hot-read.json': 128 << 20, 'post-donor-read.json': 32 << 20}
     if method['fio_jobs'] >= 2:

@@ -17,4 +17,6 @@ The experiment runner, base guest image, and full FEMU build environment live in
 
 ## Detailed repair plan (2026-09-29)
 
-See the [implementation and acceptance plan](WRITE_REPAIR_EXECUTION_PLAN_2026-09-29.zh-CN.md) for the remaining work, dependencies, correctness gates, experiment matrix, collected data, and completion criteria. This is a plan; the new implementation and test runners described there have not been executed.
+See the [implementation and acceptance plan](WRITE_REPAIR_EXECUTION_PLAN_2026-09-29.zh-CN.md) and the [dated execution record](WRITE_REPAIR_PROGRESS_2026-09-29.zh-CN.md). M1's controlled donor tests and parts of M2–M4 have been executed; the full repair and Figure 14 have **not** passed their acceptance gates.
+
+The current diagnostic builder is in `build_gc_diag.py` and `build_paper.py`; `cross_group_patch.py` supplies the borrow transform. `learnedftl-cross-borrow.patch` is the generated C diff for the latest tested diagnostic build. The runner `run_gc_diag.sh` expects the separate full FEMU checkout, ext4 storage, guest image, SSH key and local environment wrapper. Do not run it from an NTFS checkout or treat the 64-page forced-GC tests as paper-parameter results.

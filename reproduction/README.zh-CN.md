@@ -312,3 +312,8 @@ CG_ASSERT_MODEL_BITMAP=1 CG_BORROW_ALLOW_MULTI=1 CG_BORROW_DONOR_LIMIT=2 CG_BORR
 在 ext4 目录运行 `bash reproduction/run_write_short_matrix.sh`。脚本自动使用六个全新 FEMU 客机盘，分别对默认策略与诊断性的低空闲借用加固定 donor 策略各运行三次。每轮是 64 作业、4 KiB psync 随机写、40 秒、空盘起始，不含论文要求的读预热；结束后输出 `matrix.csv`、二进制 SHA-256、每轮方法记录、fio 原始 JSON、逐秒日志、QEMU 日志与验证结果。若任一轮非零退出、验证失败、二进制哈希改变或启用借用的轮次没有联合 GC，应判为**异常或未覆盖机制**，不能挑其余成功轮次直接作论文结果。
 
 2026-09-29 的六轮实际记录见 `WRITE_REPAIR_PROGRESS_2026-09-29.zh-CN.md` 第五轮。该对照的低空闲放行与固定 donor 都是论文未公开的实现选择，**仅用于定位代码瓶颈**。这些轮次没有主机读回与六轮预热，物理身份审计只覆盖被访问/搬迁的路径；通过不能替代正式正确性或图 14 验收。
+
+
+### 120 秒长测的正常与异常判断
+
+2026-09-29 已做一对空盘随机写 120 秒对照，条件、原始目录和数值见进度记录第六轮。**程序正常退出不等于性能恢复**：借用版虽完成 195 次联合 GC，末段仍降至约 133 MiB/s。看 `fio.json` 的整轮平均，同时用 `fio-bw-per-second.csv` 看阶段趋势；逐秒记录只有 `job_samples=64` 才能按完整秒作比较。若出现样本不足，保留原始日志、明确排除该秒，不要静默填补。另查 `qemu.log` 的 `CG_BORROW`、`CG_COMPONENT_GC`、`PHYS_ID_SUMMARY`、`MODEL_BITMAP_AUDIT`，以及 `method.json` 的所有诊断开关。GC 搬迁页数/主机写页只能称为数据页搬迁比，**不能称为完整 WAF**。长测对照仍是诊断用途，不能替代六轮预热及正式论文图。

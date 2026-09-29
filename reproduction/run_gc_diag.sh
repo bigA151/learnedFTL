@@ -194,7 +194,7 @@ j=json.load(open(sys.argv[1]))['jobs'][0]
 assert j['error']==0 and j['write']['io_bytes']>0
 print(f"Validated fio: {j['write']['bw_bytes']/1048576:.4f} MiB/s, {j['write']['iops']:.1f} IOPS")
 PY_VALIDATE
-if grep -Eq 'GC_EXHAUST|No free lines left|buduijin|GC_INVARIANT|GC_BAD_FREE_TARGET' "$qemu_log"; then
+if grep -Eq 'GC_EXHAUST|No free lines left|buduijin|CG_NO_REST|GC_INVARIANT|GC_BAD_FREE_TARGET|PHYS_ID_MISMATCH' "$qemu_log"; then
   echo "GC/allocator fault in $qemu_log" >&2
   exit 1
 fi

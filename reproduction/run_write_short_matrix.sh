@@ -18,13 +18,13 @@ for policy in default low_sticky; do
     if [[ "$policy" == default ]]; then
       env -u CG_ALLOW_LOW_FREE -u CG_BORROW_STICKY -u CG_BORROW_ALLOW_MULTI \
         GC_DIAG_BINARY=qemu-learnedftl-cross-borrow-greedy \
-        GC_FIO_JOBS=64 GC_MEASURE_SIZE_MIB=476 GC_FIO_PATTERN=randwrite \
+        GC_EXPLICIT_RANGES=1 GC_FIO_JOBS=64 GC_MEASURE_SIZE_MIB=476 GC_FIO_PATTERN=randwrite \
         WARMUP_PASSES=0 RUNTIME_SECONDS=40 GC_BW_LOG=1 GC_POST_READ=0 \
         bash reproduction/run_gc_diag.sh > "$log" 2>&1 || rc=$?
     else
       CG_ALLOW_LOW_FREE=1 CG_BORROW_ALLOW_MULTI=1 CG_BORROW_STICKY=1 \
         GC_DIAG_BINARY=qemu-learnedftl-cross-borrow-greedy \
-        GC_FIO_JOBS=64 GC_MEASURE_SIZE_MIB=476 GC_FIO_PATTERN=randwrite \
+        GC_EXPLICIT_RANGES=1 GC_FIO_JOBS=64 GC_MEASURE_SIZE_MIB=476 GC_FIO_PATTERN=randwrite \
         WARMUP_PASSES=0 RUNTIME_SECONDS=40 GC_BW_LOG=1 GC_POST_READ=0 \
         bash reproduction/run_gc_diag.sh > "$log" 2>&1 || rc=$?
     fi

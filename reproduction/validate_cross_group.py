@@ -46,6 +46,7 @@ fio = json.loads((p / 'fio.json').read_text())['jobs'][0]
 assert method['fio_returncode'] == method['report_returncode'] == fio['error'] == 0
 for bad in ('PHYS_ID_MISMATCH', 'PHYS_ID_NO_SOURCE', 'GC_EXHAUST',
             'GC_BAD_FREE_TARGET', 'GC_INVARIANT', 'GC_GROUP_NO_TARGET',
+            'CG_NO_REST', 'buduijin',
             'CG_RELATION_MISMATCH', 'CG_COMPONENT_UNSUPPORTED',
             'CG_BUDGET_REJECT'):
     assert bad not in log, bad
@@ -58,6 +59,7 @@ if method.get('assert_model_bitmap'):
 if model:
     model_attempts, model_exact, model_wrong = map(int, model.groups())
     assert model_attempts == model_exact + model_wrong
+    assert model_wrong == 0, 'bitmap prediction disagreed with current mapping'
     if method.get('assert_model_bitmap'):
         assert model_attempts > 0 and model_wrong == 0, 'model bitmap claim was not validated'
 

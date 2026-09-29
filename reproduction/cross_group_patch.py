@@ -374,10 +374,11 @@ static void cg_component_check(struct ssd *ssd, int hot, int donor,
 
 static void cg_close_hot_line(struct ssd *ssd, struct write_pointer *hot)
 {
-    if (cg_hot_closed[hot->id]) return;
     if (!hot->curline || hot->curline->rest != 0) abort();
-    QTAILQ_INSERT_TAIL(&ssd->lm.victim_list, hot->curline, entry);
-    ssd->lm.victim_line_cnt++;
+    if (!gc_diag_victim_contains(ssd, hot->curline)) {
+        QTAILQ_INSERT_TAIL(&ssd->lm.victim_list, hot->curline, entry);
+        ssd->lm.victim_line_cnt++;
+    }
     cg_hot_closed[hot->id] = 1;
 }
 
@@ -497,6 +498,7 @@ static void cg_reclaim_pair(struct ssd *ssd, struct write_pointer *hot,
         if (!groups[group]) continue;
         cg_hot_donor[group] = -1;
         cg_donor_hot[group] = -1;
+        cg_hot_closed[group] = 0; /* targets replace the closed source line */
     }
     cg_paired_gc++;
     cg_relation_check(ssd, "after-component");
@@ -614,17 +616,27 @@ def enable_borrow(source: str) -> str:
     cg_relation_unlink_line(ssd, line->id);''')
     source = source.replace(
         '                QTAILQ_INSERT_TAIL(&lm->victim_list, wpp->curline, entry);',
-        '''                if (!cg_hot_closed[wpp->id]) {
+        '''                if (!gc_diag_victim_contains(ssd, wpp->curline)) {
                     QTAILQ_INSERT_TAIL(&lm->victim_list, wpp->curline, entry);
                     lm->victim_line_cnt++;
-                } else {
-                    cg_hot_closed[wpp->id] = 0;
-                }''', 1)
+                }
+                cg_hot_closed[wpp->id] = 0;''', 1)
     # The original increment is now inside the conditional above.
     source = replace_once(source,
         '''                lm->victim_line_cnt++;
                 gc_diag_check(ssd, "advance-victim");''',
         '''                gc_diag_check(ssd, "advance-victim");''')
+    source = replace_once(source,
+        '    wpp->curline->rest--;\n    if (wpp->curline->rest < 0) {',
+        """    if (!wpp->curline || wpp->curline->rest <= 0) {
+        femu_log("CG_NO_REST group=%d line=%d rest=%d ch=%d lun=%d pg=%d\\n",
+                 wpp->id, wpp->curline ? wpp->curline->id : -1,
+                 wpp->curline ? wpp->curline->rest : -1,
+                 wpp->ch, wpp->lun, wpp->pg);
+        abort();
+    }
+    wpp->curline->rest--;
+    if (wpp->curline->rest < 0) {""")
     source = replace_once(source,
         '''        // * maintain the consistency of bitmap
         // if (ssd->bitmaps[lpn] == 1) {

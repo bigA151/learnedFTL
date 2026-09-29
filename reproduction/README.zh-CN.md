@@ -332,3 +332,9 @@ CG_ASSERT_MODEL_BITMAP=1 CG_BORROW_ALLOW_MULTI=1 CG_BORROW_DONOR_LIMIT=2 CG_BORR
 旧全局 `filesize=30518m` 不能保证每任务 476 MiB 区域。更正后，64×476 MiB、40 秒的顺序写末十秒仍约 7.64 MiB/s，借用 0；同一诊断二进制和多组借用开关下，64×128 MiB 一轮触发 431,416 页借用、47 次联合 GC，末段日志约 313.87 MiB/s，但有缺失秒与不完整样本。受限一对一版本在活跃 donor 同时写入时主动终止，不能算性能结果。原始目录、正确性检查及方法差异见进度记录第八轮和 [fio 地址范围核验](FIO_ADDRESS_LAYOUT_2026-09-29.zh-CN.md)。**这些是新盘短时诊断，不是论文图 14。**
 
 正式续跑先用 `bash reproduction/run_paper_fig14.sh --status` 核对旧结果当前为 18 项未完成、2 项失败。执行 `--resume` 时脚本会先将未完成项的旧原始目录移动到 `results/paper_fig14-archive/时间戳/`，再从头预热和测量。每轮必须保存 `runN-jobfile.fio`、`runN-console.json`、原始 fio JSON 和 `method.json`；缺任务文件、哈希不符或版本不是 `explicit-per-job-end-v1` 均判未完成。脚本现在能生成正确地址，不意味着 LearnedFTL 和 LeaFTL 的写入问题已经修复。
+
+### 共享 line 长测防错结论（2026-09-29）
+
+旧诊断二进制的一轮 120 秒顺序写出现 `buduijin`（line 剩余页已小于 0）及 victim 队列计数失配，fio=255，必须判为失败并保留原始日志。修正共享 line 封闭状态与写入前空间检查后，同条件三次独立 120 秒短工作集复测通过，详情见进度记录第九轮。若新实验再出现 `CG_NO_REST`、`GC_INVARIANT`、`PHYS_ID_MISMATCH`、fio 非零退出或读回失败，应立即判失败，保存 `qemu.log`、`fio.json`、`manifest.json` 和任务文件，不得用其他成功轮次补位。三轮成功的 `MODEL_BITMAP_AUDIT attempts=0` 代表模型路径未覆盖，不能填作模型正确性证据；128 MiB 地址范围也不能冒充论文参数。
+
+新构建另有一轮 40 秒、测后读回的模型路径补测：22,719 次 bitmap 预测全部匹配，错误 0；原始目录见进度记录“新构建的模型路径补测”。它不能替代三轮 120 秒测试末态（那三轮模型尝试为 0），也不能替代六盘预热后的验证。

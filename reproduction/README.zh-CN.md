@@ -338,3 +338,9 @@ CG_ASSERT_MODEL_BITMAP=1 CG_BORROW_ALLOW_MULTI=1 CG_BORROW_DONOR_LIMIT=2 CG_BORR
 旧诊断二进制的一轮 120 秒顺序写出现 `buduijin`（line 剩余页已小于 0）及 victim 队列计数失配，fio=255，必须判为失败并保留原始日志。修正共享 line 封闭状态与写入前空间检查后，同条件三次独立 120 秒短工作集复测通过，详情见进度记录第九轮。若新实验再出现 `CG_NO_REST`、`GC_INVARIANT`、`PHYS_ID_MISMATCH`、fio 非零退出或读回失败，应立即判失败，保存 `qemu.log`、`fio.json`、`manifest.json` 和任务文件，不得用其他成功轮次补位。三轮成功的 `MODEL_BITMAP_AUDIT attempts=0` 代表模型路径未覆盖，不能填作模型正确性证据；128 MiB 地址范围也不能冒充论文参数。
 
 新构建另有一轮 40 秒、测后读回的模型路径补测：22,719 次 bitmap 预测全部匹配，错误 0；原始目录见进度记录“新构建的模型路径补测”。它不能替代三轮 120 秒测试末态（那三轮模型尝试为 0），也不能替代六盘预热后的验证。
+
+### 顺序写 GC 空间为何塌陷（2026-09-30）
+
+按 [GC 空间证据与计算方法](GC_SPACE_CAUSAL_2026-09-30.zh-CN.md) 核对最新显式地址范围诊断：64 个任务各 476 MiB 时，每归还一条 32,768 页 line，约 32,762 页需要搬迁，结束时 238 条组 line 打开、只有 17 条全局 free line、0 个合格 donor。64×128 MiB 三轮的每条 line 搬迁约 7,547–8,394 页，但使用了论文未公开的固定 donor 等策略。**这是诊断差异，不是正式图 14 的性能对比。**
+
+实习生在一轮结束后运行 `python3 reproduction/summarize_gc_space.py <本轮结果目录>`，保存 `gc-space-summary.json`，并与 `fio.json`、`method.json`、`qemu.log` 一起归档。正常：fio/report 为 0、脚本成功、`data_pages_copied` 与 `gc_writes` 一致。异常：脚本报计数缺失/不一致、fio 失败、`PHYS_ID_MISMATCH` 或 `GC_INVARIANT`；保留原目录，不得将该轮作性能结果。`uncopied_slots` 含未写位置，并非净空闲页；`data_pages_copied` 也不是完整 WAF。

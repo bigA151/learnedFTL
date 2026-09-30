@@ -575,6 +575,14 @@ def enable_borrow(source: str) -> str:
         '    ssd->gtd_wps = g_malloc0(sizeof(struct write_pointer) * ssd->sp.tt_line_wps);',
         '''    ssd->gtd_wps = g_malloc0(sizeof(struct write_pointer) * ssd->sp.tt_line_wps);
     cg_group_count = ssd->sp.tt_line_wps;
+    const char *early_gc_text = getenv("CG_EARLY_GC_FREE");
+    if (early_gc_text) {
+        char *end = NULL;
+        long value = strtol(early_gc_text, &end, 10);
+        if (*end || value < 3 || value > ssd->sp.tt_lines / 2) abort();
+        free_line_threshold = value;
+        femu_log("CG_EARLY_GC_FREE threshold=%d\\n", free_line_threshold);
+    }
     cg_group_trained = g_malloc0(ssd->sp.tt_line_wps);
     cg_hot_donor = g_malloc(sizeof(int) * ssd->sp.tt_line_wps);
     cg_donor_hot = g_malloc(sizeof(int) * ssd->sp.tt_line_wps);

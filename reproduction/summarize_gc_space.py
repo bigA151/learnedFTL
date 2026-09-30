@@ -30,7 +30,19 @@ calls, wp, trans, low, none, alloc, empty, empty_with_victim, freed, user_writes
 physical_writes, copies, checked_reads = map(int, identity.groups())
 free, open_groups, room_groups, eligible_groups, eligible_pages, gate_open = map(int, donor.groups())
 assert freed > 0 and copies <= freed * args.pages_per_line
-assert physical_writes == user_writes and copies == gc_writes, 'other write path needs separate accounting'
+pre_measure_writes = 0
+for filename in ('warmup.json', 'sparse-prepare.json', 'prepare.json'):
+    source = folder / filename
+    if not source.exists():
+        continue
+    data = json.loads(source.read_text())
+    if data.get('skipped'):
+        continue
+    before_bytes = data['jobs'][0]['write']['io_bytes']
+    assert before_bytes % 4096 == 0, f'{filename}: non-page-aligned write count'
+    pre_measure_writes += before_bytes // 4096
+assert physical_writes == pre_measure_writes + user_writes, 'host write accounting differs from phase counters'
+assert copies == gc_writes, 'other GC write path needs separate accounting'
 uncopied = freed * args.pages_per_line - copies
 result = {
     'result': str(folder.resolve()),
@@ -44,6 +56,7 @@ result = {
     'uncopied_slots_per_returned_line': uncopied / freed,
     'uncopied_slots_include_invalid_and_unwritten': True,
     'host_write_pages': user_writes,
+    'pre_measure_host_write_pages': pre_measure_writes,
     'translation_gc_calls': trans,
     'low_free_gc_calls': low,
     'end_free_lines': free,

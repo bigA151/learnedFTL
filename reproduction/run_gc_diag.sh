@@ -154,6 +154,27 @@ if [[ "${GC_POST_READ:-0}" == 1 && "$fio_rc" == 0 ]]; then
       'sudo fio --name=second-hot-read --filename=/dev/nvme0n1 --rw=read --bs=4k --ioengine=psync --direct=1 --size=16m --offset=487428k --output-format=json' \
       > "$out/post-second-hot-read.json" 2> "$out/post-second-hot-read.err" || fio_rc=1
   fi
+  if [[ "${GC_POST_READ_FULL:-0}" == 1 && "${GC_EXPLICIT_RANGES:-0}" == 1 ]]; then
+    python3 - "$jobs" "$measure_size_mib" "$offset_increment_kib" > "$out/post-full-read.fio" <<'PY_POST_FULL_JOB'
+import sys
+jobs, region_mib, stride_kib = map(int, sys.argv[1:])
+print('[global]\nfilename=/dev/nvme0n1\nrw=read\nbs=4k\nioengine=psync\ndirect=1\ngroup_reporting=1')
+for job in range(jobs):
+    start = job * stride_kib
+    end = start + region_mib * 1024
+    assert end <= 30518 * 1024
+    print(f'[job{job:02d}]\noffset={start}k\nfilesize={end}k\nsize={region_mib * 1024}k')
+PY_POST_FULL_JOB
+    ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 'cat > /tmp/gc-post-full-read.fio' < "$out/post-full-read.fio"
+    ssh "${ssh_opts[@]}" ubuntu@127.0.0.1 \
+      'sudo fio /tmp/gc-post-full-read.fio --output-format=json' \
+      > "$out/post-full-read.json" 2> "$out/post-full-read.err" || fio_rc=1
+    python3 - "$out/post-full-read.json" "$jobs" "$measure_size_mib" <<'PY_POST_FULL_CHECK' || fio_rc=1
+import json, sys
+entry = json.load(open(sys.argv[1]))['jobs'][0]
+assert entry['error'] == 0 and entry['read']['io_bytes'] == int(sys.argv[2]) * int(sys.argv[3]) * 1048576
+PY_POST_FULL_CHECK
+  fi
   python3 - "$out" "$jobs" <<'PY_POST_READ' || fio_rc=1
 import json, sys
 from pathlib import Path
@@ -183,7 +204,7 @@ with open(p+'/method.json','w') as f:
             'fio_returncode':int(fio_rc),'report_returncode':int(report_rc),
             'address_layout':'explicit-per-job-end-v1' if __import__('os').environ.get('GC_EXPLICIT_RANGES')=='1' else 'legacy-global-filesize',
             'jobfile_sha256':__import__('hashlib').sha256(open(p+'/measure.fio','rb').read()).hexdigest() if __import__('os').path.exists(p+'/measure.fio') else None,
-            'guest_image':image,'pair_trigger':int(__import__('os').environ.get('CG_BORROW_PAIR_TRIGGER','8192')),'allow_multi':bool(__import__('os').environ.get('CG_BORROW_ALLOW_MULTI')),'allow_low_free':bool(__import__('os').environ.get('CG_ALLOW_LOW_FREE')),'borrow_sticky':bool(__import__('os').environ.get('CG_BORROW_STICKY')),'donor_limit':int(__import__('os').environ.get('CG_BORROW_DONOR_LIMIT','256')),'max_active_borrowers':int(__import__('os').environ.get('CG_BORROW_MAX_ACTIVE','256')),'post_read':bool(int(__import__('os').environ.get('GC_POST_READ','0'))),'assert_model_bitmap':bool(__import__('os').environ.get('CG_ASSERT_MODEL_BITMAP')),'test_budget_free':__import__('os').environ.get('CG_TEST_BUDGET_FREE'),'test_fail_target_at':__import__('os').environ.get('CG_TEST_FAIL_TARGET_AT')},f,indent=2)
+            'guest_image':image,'pair_trigger':int(__import__('os').environ.get('CG_BORROW_PAIR_TRIGGER','8192')),'allow_multi':bool(__import__('os').environ.get('CG_BORROW_ALLOW_MULTI')),'allow_low_free':bool(__import__('os').environ.get('CG_ALLOW_LOW_FREE')),'borrow_sticky':bool(__import__('os').environ.get('CG_BORROW_STICKY')),'donor_limit':int(__import__('os').environ.get('CG_BORROW_DONOR_LIMIT','256')),'max_active_borrowers':int(__import__('os').environ.get('CG_BORROW_MAX_ACTIVE','256')),'early_gc_free':int(__import__('os').environ.get('CG_EARLY_GC_FREE','3')),'post_read':bool(int(__import__('os').environ.get('GC_POST_READ','0'))),'post_read_full':bool(int(__import__('os').environ.get('GC_POST_READ_FULL','0'))),'assert_model_bitmap':bool(__import__('os').environ.get('CG_ASSERT_MODEL_BITMAP')),'test_budget_free':__import__('os').environ.get('CG_TEST_BUDGET_FREE'),'test_fail_target_at':__import__('os').environ.get('CG_TEST_FAIL_TARGET_AT')},f,indent=2)
  f.write('\n')
 PY
 echo "Done: $base/$out (fio=$fio_rc, report=$report_rc)"

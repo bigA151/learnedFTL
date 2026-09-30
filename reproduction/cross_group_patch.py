@@ -657,6 +657,16 @@ def enable_borrow(source: str) -> str:
                  wpp->id, wpp->curline ? wpp->curline->id : -1,
                  wpp->curline ? wpp->curline->rest : -1,
                  wpp->ch, wpp->lun, wpp->pg);
+        femu_log("CG_FATAL_SNAPSHOT attempts=%" PRIu64 " success=%" PRIu64
+                 " borrowed_pages=%" PRIu64 " paired_gc=%" PRIu64
+                 " high=%" PRIu64 " low=%" PRIu64 " no_open=%" PRIu64
+                 " no_room=%" PRIu64 " trained=%" PRIu64
+                 " busy=%" PRIu64 " selected=%" PRIu64 "\\n",
+                 cg_borrow_attempts, cg_borrow_success, cg_borrow_pages,
+                 cg_paired_gc, cg_reason_high, cg_reason_low,
+                 cg_reason_no_open, cg_reason_no_room, cg_reason_trained,
+                 cg_reason_busy, cg_reason_selected);
+        cg_donor_snapshot(ssd);
         abort();
     }
     wpp->curline->rest--;

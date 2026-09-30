@@ -350,3 +350,5 @@ CG_ASSERT_MODEL_BITMAP=1 CG_BORROW_ALLOW_MULTI=1 CG_BORROW_DONOR_LIMIT=2 CG_BORR
 ### 随机写 120 秒为何失败（2026-09-30）
 
 见[长测原始证据与复测门槛](RANDOM_WRITE_LONG_GC_2026-09-30.zh-CN.md)。首次长测因诊断缓冲 16 MiB 上限提前中止；提高到 128 MiB 后，两次新盘实验分别形成 120 组或 144 组联合回收组件，目标 line 预算 239/287，实际 free=16，均由 `CG_BUDGET_REJECT` 在搬迁前停止。**fio/report=255 是异常结果，不能用失败前速度作论文数据。**实习生遇到此标记时保存完整结果目录，核对 `method.json`、`manifest.json` 和 `qemu.log`，不要删除预算保护或把它当作内核/宿主盘崩溃。128 MiB 是诊断程序的宿主暂存安全上限，不是论文 SSD 的缓存参数。
+
+`CG_BORROW_MAX_ACTIVE=1` 是新增的**诊断开关**，限制每个 donor 同时服务一个热组；默认 256。它在两轮 120 秒随机写中都未使实验完成，一轮默认 8,192 页、一轮 2,048 页触发，最终均为 `GC_EXHAUST free=0` 与 `CG_NO_REST`。不要把下调触发值写成修复成功，也不要以失败轮的前半段吞吐量填图。细节和目录在长测证据文档。

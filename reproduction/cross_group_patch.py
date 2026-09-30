@@ -165,10 +165,17 @@ static void cg_relation_check(struct ssd *ssd, const char *phase)
 static bool cg_donor_candidate(struct write_pointer *candidate,
                                struct write_pointer *hot)
 {
+    int other_borrowers = 0;
+    for (int group = 0; group < cg_group_count; group++)
+        if ((!hot || group != hot->id) && cg_hot_donor[group] == candidate->id)
+            other_borrowers++;
     return candidate != hot && candidate->curline &&
            candidate->curline->rest >= cg_borrow_min_free &&
            !cg_group_trained[candidate->id] &&
            candidate->id < cg_donor_limit &&
+           (cg_max_active_borrowers == 256 ||
+            (cg_hot_donor[candidate->id] < 0 &&
+             other_borrowers < cg_max_active_borrowers)) &&
            (cg_allow_multi ||
             (cg_donor_hot[candidate->id] < 0 && cg_hot_donor[candidate->id] < 0));
 }
@@ -182,6 +189,10 @@ static struct write_pointer *cg_select_donor(struct ssd *ssd, struct write_point
                  hot->id, cg_donor_hot[hot->id]);
         abort();
     }
+    /* A leased donor may keep writing, but may not borrow onward when
+     * this diagnostic policy caps connected borrower components. */
+    if (cg_max_active_borrowers < 256 && cg_donor_hot[hot->id] >= 0)
+        return NULL;
     if (cg_allow_multi && cg_borrow_sticky && cg_hot_donor[hot->id] >= 0) {
         struct write_pointer *pinned = &ssd->gtd_wps[cg_hot_donor[hot->id]];
         if (cg_donor_candidate(pinned, hot)) {
@@ -538,6 +549,7 @@ def enable_borrow(source: str) -> str:
         "static int cg_borrow_min_free = 8192;\n"
         "static int cg_pair_trigger = 8192;\n"
         "static int cg_donor_limit = 256;\n"
+        "static int cg_max_active_borrowers = 256, cg_group_count;\n"
         "static int cg_test_budget_free = -1, cg_test_fail_target_at = -1;\n"
         "static bool cg_allow_multi, cg_allow_low_free, cg_borrow_sticky, cg_in_migration;\n"
         "static uint64_t cg_paired_gc, cg_seq_model_inits;\n"
@@ -562,6 +574,7 @@ def enable_borrow(source: str) -> str:
     source = replace_once(source,
         '    ssd->gtd_wps = g_malloc0(sizeof(struct write_pointer) * ssd->sp.tt_line_wps);',
         '''    ssd->gtd_wps = g_malloc0(sizeof(struct write_pointer) * ssd->sp.tt_line_wps);
+    cg_group_count = ssd->sp.tt_line_wps;
     cg_group_trained = g_malloc0(ssd->sp.tt_line_wps);
     cg_hot_donor = g_malloc(sizeof(int) * ssd->sp.tt_line_wps);
     cg_donor_hot = g_malloc(sizeof(int) * ssd->sp.tt_line_wps);
@@ -590,6 +603,13 @@ def enable_borrow(source: str) -> str:
         long value = strtol(limit_text, &end, 10);
         if (*end || value < 1 || value > ssd->sp.tt_line_wps) abort();
         cg_donor_limit = value;
+    }
+    const char *max_borrowers = getenv("CG_BORROW_MAX_ACTIVE");
+    if (max_borrowers) {
+        char *end = NULL;
+        long value = strtol(max_borrowers, &end, 10);
+        if (*end || value < 1 || value > ssd->sp.tt_line_wps) abort();
+        cg_max_active_borrowers = value;
     }
     const char *budget_text = getenv("CG_TEST_BUDGET_FREE");
     if (budget_text) {

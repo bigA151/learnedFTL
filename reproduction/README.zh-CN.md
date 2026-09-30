@@ -346,3 +346,7 @@ CG_ASSERT_MODEL_BITMAP=1 CG_BORROW_ALLOW_MULTI=1 CG_BORROW_DONOR_LIMIT=2 CG_BORR
 实习生在一轮结束后运行 `python3 reproduction/summarize_gc_space.py <本轮结果目录>`，保存 `gc-space-summary.json`，并与 `fio.json`、`method.json`、`qemu.log` 一起归档。正常：fio/report 为 0、脚本成功、`data_pages_copied` 与 `gc_writes` 一致。异常：脚本报计数缺失/不一致、fio 失败、`PHYS_ID_MISMATCH` 或 `GC_INVARIANT`；保留原目录，不得将该轮作性能结果。`uncopied_slots` 含未写位置，并非净空闲页；`data_pages_copied` 也不是完整 WAF。
 
 同构建、同 476 MiB 范围的 40 秒补测显示随机写的数据页 GC 搬迁为 0、末十秒约 662.98 MiB/s；顺序写搬迁 2,587,885 页、末十秒约 1.72 MiB/s。**不能只比较整轮平均**，顺序写前十秒约 1,022 MiB/s 会掩盖后段。随机写还未经历数据页搬迁 GC，不能判为长期通过。原始目录见上述 GC 空间证据文档。
+
+### 随机写 120 秒为何失败（2026-09-30）
+
+见[长测原始证据与复测门槛](RANDOM_WRITE_LONG_GC_2026-09-30.zh-CN.md)。首次长测因诊断缓冲 16 MiB 上限提前中止；提高到 128 MiB 后，两次新盘实验分别形成 120 组或 144 组联合回收组件，目标 line 预算 239/287，实际 free=16，均由 `CG_BUDGET_REJECT` 在搬迁前停止。**fio/report=255 是异常结果，不能用失败前速度作论文数据。**实习生遇到此标记时保存完整结果目录，核对 `method.json`、`manifest.json` 和 `qemu.log`，不要删除预算保护或把它当作内核/宿主盘崩溃。128 MiB 是诊断程序的宿主暂存安全上限，不是论文 SSD 的缓存参数。

@@ -794,7 +794,7 @@
  
          if (!mapped_ppa(&ppa) || !valid_ppa(ssd, &ppa)) {
              ssd->stat.access_cnt--;
-@@ -2637,6 +3054,394 @@
+@@ -2637,6 +3054,398 @@
      }
      // ssd->stat.read_time += (maxlat + (time2.tv_sec - time1.tv_sec)*1000000000 + (time2.tv_nsec - time1.tv_nsec));
      return maxlat;
@@ -1009,9 +1009,13 @@
 +        (uint64_t)ssd->sp.tt_gtd_size * (sizeof(uint64_t *) + sizeof(int)) +
 +        staged_gtds * ssd->sp.ents_per_pg * sizeof(uint64_t);
 +    g_free(gtd_seen);
++    /* The previous 16 MiB diagnostic cap rejected a valid 8,769-GTD
++     * component before any migration. At this geometry, the complete GTD
++     * can require about 64 MiB of LPN staging plus index arrays. Keep a
++     * fail-closed cap above that bound; this is diagnostic host memory. */
 +    femu_log("CG_STAGE_BUDGET gtds=%" PRIu64 " bytes=%" PRIu64
-+             " limit=%d\n", staged_gtds, staging_bytes, 16 << 20);
-+    if (staging_bytes > (16ULL << 20)) {
++             " limit=%d\n", staged_gtds, staging_bytes, 128 << 20);
++    if (staging_bytes > (128ULL << 20)) {
 +        femu_log("CG_STAGE_LIMIT bytes=%" PRIu64 "\n", staging_bytes);
 +        abort();
 +    }
@@ -1189,7 +1193,7 @@
  }
  
  static uint64_t ssd_write(struct ssd *ssd, NvmeRequest *req)
-@@ -2652,7 +3457,8 @@
+@@ -2652,7 +3461,8 @@
      struct ppa ppa;
      uint64_t lpn;
      uint64_t curlat = 0, maxlat = 0;
@@ -1199,7 +1203,7 @@
  
      if (end_lpn >= spp->tt_pgs) {
          ftl_err("start_lpn=%"PRIu64",tt_pgs=%d\n", start_lpn, ssd->sp.tt_pgs);
-@@ -2667,10 +3473,8 @@
+@@ -2667,10 +3477,8 @@
  
          ftl_assert(wp_index == ssd->sp.tt_lines-1);
  
@@ -1212,7 +1216,7 @@
          
          cmt_entry = cmt_hit(ssd, lpn);
          if (cmt_entry) {
-@@ -2694,19 +3498,42 @@
+@@ -2694,19 +3502,42 @@
          }
  
          struct write_pointer *lwp= &ssd->gtd_wps[wp_index];
@@ -1261,7 +1265,7 @@
  
          struct nand_cmd swr;
          swr.type = USER_IO;
-@@ -2715,43 +3542,51 @@
+@@ -2715,43 +3546,51 @@
          /* get latency statistics */
          curlat = ssd_advance_status(ssd, &ppa, &swr);
          maxlat = (curlat > maxlat) ? curlat : maxlat;

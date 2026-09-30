@@ -328,9 +328,13 @@ static void cg_component_check(struct ssd *ssd, int hot, int donor,
         (uint64_t)ssd->sp.tt_gtd_size * (sizeof(uint64_t *) + sizeof(int)) +
         staged_gtds * ssd->sp.ents_per_pg * sizeof(uint64_t);
     g_free(gtd_seen);
+    /* The previous 16 MiB diagnostic cap rejected a valid 8,769-GTD
+     * component before any migration. At this geometry, the complete GTD
+     * can require about 64 MiB of LPN staging plus index arrays. Keep a
+     * fail-closed cap above that bound; this is diagnostic host memory. */
     femu_log("CG_STAGE_BUDGET gtds=%" PRIu64 " bytes=%" PRIu64
-             " limit=%d\n", staged_gtds, staging_bytes, 16 << 20);
-    if (staging_bytes > (16ULL << 20)) {
+             " limit=%d\n", staged_gtds, staging_bytes, 128 << 20);
+    if (staging_bytes > (128ULL << 20)) {
         femu_log("CG_STAGE_LIMIT bytes=%" PRIu64 "\n", staging_bytes);
         abort();
     }

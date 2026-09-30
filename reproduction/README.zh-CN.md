@@ -344,3 +344,5 @@ CG_ASSERT_MODEL_BITMAP=1 CG_BORROW_ALLOW_MULTI=1 CG_BORROW_DONOR_LIMIT=2 CG_BORR
 按 [GC 空间证据与计算方法](GC_SPACE_CAUSAL_2026-09-30.zh-CN.md) 核对最新显式地址范围诊断：64 个任务各 476 MiB 时，每归还一条 32,768 页 line，约 32,762 页需要搬迁，结束时 238 条组 line 打开、只有 17 条全局 free line、0 个合格 donor。64×128 MiB 三轮的每条 line 搬迁约 7,547–8,394 页，但使用了论文未公开的固定 donor 等策略。**这是诊断差异，不是正式图 14 的性能对比。**
 
 实习生在一轮结束后运行 `python3 reproduction/summarize_gc_space.py <本轮结果目录>`，保存 `gc-space-summary.json`，并与 `fio.json`、`method.json`、`qemu.log` 一起归档。正常：fio/report 为 0、脚本成功、`data_pages_copied` 与 `gc_writes` 一致。异常：脚本报计数缺失/不一致、fio 失败、`PHYS_ID_MISMATCH` 或 `GC_INVARIANT`；保留原目录，不得将该轮作性能结果。`uncopied_slots` 含未写位置，并非净空闲页；`data_pages_copied` 也不是完整 WAF。
+
+同构建、同 476 MiB 范围的 40 秒补测显示随机写的数据页 GC 搬迁为 0、末十秒约 662.98 MiB/s；顺序写搬迁 2,587,885 页、末十秒约 1.72 MiB/s。**不能只比较整轮平均**，顺序写前十秒约 1,022 MiB/s 会掩盖后段。随机写还未经历数据页搬迁 GC，不能判为长期通过。原始目录见上述 GC 空间证据文档。

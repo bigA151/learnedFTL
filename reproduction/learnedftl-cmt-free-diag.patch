@@ -1,0 +1,498 @@
+--- a/hw/femu/bbssd/ld-tpftl.c
++++ b/hw/femu/bbssd/ld-tpftl.c
+@@ -18,10 +18,326 @@
+ 
+ #include "ld-tpftl.h"
+ #include "util.h"
++/* Diagnostic only: bounded in-memory free-CMT snapshots, dumped after fio.
++ * Stable slot IDs refer to cm->cmt_entries[], never virtual addresses.
++ * Hooks run on the FTL thread; admin reset/report must run with fio stopped.
++ */
++#define CF_MAX_SNAPSHOTS 256
++#define CF_MAX_BYTES (96ULL * 1024 * 1024)
++struct cf_entry {
++    uint64_t lpn, ppn, next_avail_time;
++    int slot, dirty, prefetch;
++};
++struct cf_snapshot {
++    uint64_t ns, writes, allocs, returns;
++    int phase, free_count, used_count, count;
++    const char *reason;
++    struct cf_entry *entries;
++};
++static struct {
++    struct cf_snapshot snapshots[CF_MAX_SNAPSHOTS];
++    uint64_t start_ns, last_ns, writes, allocs, returns, bytes;
++    unsigned count, dropped, transition_pairs;
++    int phase, min_free, max_free;
++    bool enabled, ready, first_empty;
++} cf;
++
++static void cf_capture(struct ssd *ssd, const char *reason)
++{
++    struct cmt_mgmt *cm = &ssd->cm;
++    struct cmt_entry *e;
++    struct cf_snapshot *s;
++    uint8_t *seen;
++    int count = 0;
++    uint64_t bytes;
++    if (!cf.enabled) return;
++    if (cm->free_cmt_entry_cnt < 0 || cm->used_cmt_entry_cnt < 0 ||
++        cm->free_cmt_entry_cnt + cm->used_cmt_entry_cnt != cm->tt_entries) {
++        femu_log("CMT_FREE_INVARIANT counters reason=%s\n", reason);
++        abort();
++    }
++    bytes = (uint64_t)cm->free_cmt_entry_cnt * sizeof(struct cf_entry);
++    if (cf.count >= CF_MAX_SNAPSHOTS || cf.bytes + bytes > CF_MAX_BYTES) {
++        cf.dropped++;
++        return;
++    }
++    s = &cf.snapshots[cf.count++];
++    s->reason = reason;
++    s->ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME) - cf.start_ns;
++    s->phase = cf.phase;
++    s->writes = cf.writes;
++    s->allocs = cf.allocs;
++    s->returns = cf.returns;
++    s->free_count = cm->free_cmt_entry_cnt;
++    s->used_count = cm->used_cmt_entry_cnt;
++    s->entries = bytes ? g_malloc0(bytes) : NULL;
++    cf.bytes += bytes;
++    seen = g_malloc0(cm->tt_entries);
++    QTAILQ_FOREACH(e, &cm->free_cmt_entry_list, entry) {
++        uintptr_t p = (uintptr_t)e, base = (uintptr_t)cm->cmt_entries;
++        int slot;
++        if (p < base || p >= base + (uint64_t)cm->tt_entries * sizeof(*e) ||
++            (p - base) % sizeof(*e) || count >= s->free_count) goto bad;
++        slot = (p - base) / sizeof(*e);
++        if (seen[slot] || e->lpn != INVALID_LPN || e->ppn != UNMAPPED_PPA ||
++            e->dirty != CLEAN || e->prefetch || e->next_avail_time) goto bad;
++        seen[slot] = 1;
++        s->entries[count++] = (struct cf_entry){e->lpn, e->ppn,
++            e->next_avail_time, slot, e->dirty, e->prefetch};
++    }
++    if (count != s->free_count) goto bad;
++    s->count = count;
++    g_free(seen);
++    return;
++bad:
++    femu_log("CMT_FREE_INVARIANT list reason=%s walked=%d expected=%d\n",
++             reason, count, s->free_count);
++    abort();
++}
++
++static void cf_init(struct ssd *ssd)
++{
++    cf.enabled = getenv("CMT_FREE_DUMP_PREFIX") != NULL;
++    cf.start_ns = cf.last_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
++    cf.min_free = cf.max_free = ssd->cm.free_cmt_entry_cnt;
++    cf.ready = true;
++    cf_capture(ssd, "init");
++}
++
++static void cf_reset(struct ssd *ssd)
++{
++    if (!cf.ready || !cf.enabled) return;
++    cf.phase++;
++    cf.writes = cf.allocs = cf.returns = 0;
++    cf.transition_pairs = 0;
++    cf.first_empty = false;
++    cf.min_free = cf.max_free = ssd->cm.free_cmt_entry_cnt;
++    cf.last_ns = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
++    cf_capture(ssd, "before_fio");
++}
++
++static void cf_alloc(struct ssd *ssd)
++{
++    if (!cf.enabled) return;
++    cf.allocs++;
++    cf.min_free = MIN(cf.min_free, ssd->cm.free_cmt_entry_cnt);
++    if (cf.allocs == 1 || cf.allocs == 64 || cf.allocs == 1024 ||
++        cf.allocs == 8192 || cf.allocs == 65536)
++        cf_capture(ssd, "allocation_milestone");
++    if (!ssd->cm.free_cmt_entry_cnt && !cf.first_empty) {
++        cf.first_empty = true;
++        cf_capture(ssd, "first_empty");
++    }
++    if (cf.returns > 0 && cf.returns <= 8)
++        cf_capture(ssd, "allocated_after_return");
++}
++
++static void cf_return(struct ssd *ssd)
++{
++    if (!cf.enabled) return;
++    cf.returns++;
++    cf.max_free = MAX(cf.max_free, ssd->cm.free_cmt_entry_cnt);
++    if (cf.returns <= 8) cf_capture(ssd, "eviction_return");
++}
++
++static void cf_write(struct ssd *ssd)
++{
++    uint64_t now;
++    if (!cf.enabled) return;
++    cf.writes++;
++    if (cf.writes % 1024) return;
++    now = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
++    if (now - cf.last_ns >= 1000000000ULL) {
++        cf_capture(ssd, "periodic");
++        cf.last_ns = now;
++    }
++}
++
++static void cf_report(struct ssd *ssd)
++{
++    const char *prefix = getenv("CMT_FREE_DUMP_PREFIX");
++    char *path;
++    FILE *snap, *rows;
++    unsigned i;
++    if (!cf.enabled || !prefix) return;
++    cf_capture(ssd, "after_fio");
++    path = g_strdup_printf("%s-snapshots.csv", prefix);
++    snap = fopen(path, "w");
++    g_free(path);
++    path = g_strdup_printf("%s-entries.csv", prefix);
++    rows = fopen(path, "w");
++    g_free(path);
++    if (!snap || !rows) {
++        femu_log("CMT_FREE_DUMP_ERROR fopen errno=%d\n", errno);
++        abort();
++    }
++    fprintf(snap, "snapshot_id,phase,reason,elapsed_ns,host_write_pages,allocations,returns,capacity,free_count,used_count,walk_count\n");
++    fprintf(rows, "snapshot_id,queue_position,slot_id,lpn,ppn,dirty,prefetch,next_avail_time\n");
++    for (i = 0; i < cf.count; i++) {
++        struct cf_snapshot *s = &cf.snapshots[i];
++        int j;
++        fprintf(snap, "%u,%d,%s,%" PRIu64 ",%" PRIu64 ",%" PRIu64
++                ",%" PRIu64 ",%d,%d,%d,%d\n", i, s->phase, s->reason,
++                s->ns, s->writes, s->allocs, s->returns, ssd->cm.tt_entries,
++                s->free_count, s->used_count, s->count);
++        for (j = 0; j < s->count; j++) {
++            struct cf_entry *e = &s->entries[j];
++            fprintf(rows, "%u,%d,%d,%" PRIu64 ",%" PRIu64 ",%d,%d,%" PRIu64 "\n",
++                    i, j, e->slot, e->lpn, e->ppn, e->dirty,
++                    e->prefetch, e->next_avail_time);
++        }
++    }
++    if (fclose(snap) || fclose(rows)) {
++        femu_log("CMT_FREE_DUMP_ERROR fclose\n");
++        abort();
++    }
++    femu_log("CMT_FREE_DONE snapshots=%u dropped=%u capacity=%d min_free=%d"
++             " max_free=%d end_free=%d allocations=%" PRIu64 " returns=%" PRIu64
++             " host_write_pages=%" PRIu64 " memory_bytes=%" PRIu64 " prefix=%s\n",
++             cf.count, cf.dropped, ssd->cm.tt_entries, cf.min_free, cf.max_free,
++             ssd->cm.free_cmt_entry_cnt, cf.allocs, cf.returns, cf.writes,
++             cf.bytes, prefix);
++}
++
+ 
+ // static int hit_num = 0;
+ // static int gc_num = 0;
+ // static int gc_line_num = 0;
++
++static struct {
++    uint64_t calls, branch_wp, branch_trans, branch_low, branch_none;
++    uint64_t alloc_attempt, alloc_empty, alloc_empty_with_victim;
++    uint64_t freed, user_writes, gc_writes;
++    uint64_t min_free, min_victim;
++} gc_diag;
++static bool gc_diag_force_fallback;
++static bool gc_diag_skip_once;
++static bool gc_diag_choice_logged;
++static bool gc_diag_gc_busy_wp[512];
++static uint64_t model_bitmap_attempt, model_bitmap_exact, model_bitmap_wrong;
++
++static uint64_t gc_diag_group_invalid_pages(struct write_pointer *wp)
++{
++    uint64_t invalid = 0;
++    struct wp_lines *item = wp->wpl ? wp->wpl->next : NULL;
++    while (item) {
++        if (item->line) invalid += item->line->ipc;
++        item = item->next;
++    }
++    return invalid;
++}
++
++static void gc_diag_donor_audit(struct ssd *ssd, const char *phase)
++{
++    uint64_t open_lines = 0, open_pages = 0;
++    uint64_t untrained_lines = 0, untrained_pages = 0, partial_lines = 0;
++    int groups = ssd->sp.tt_line_wps < 240 ? ssd->sp.tt_line_wps : 240;
++    for (int i = 0; i < groups; i++) {
++        struct write_pointer *wp = &ssd->gtd_wps[i];
++        if (!wp->curline || wp->curline->rest <= 0) continue;
++        int first = i * ssd->sp.trans_per_line;
++        int last = first + ssd->sp.trans_per_line;
++        if (last > ssd->sp.tt_gtd_size) last = ssd->sp.tt_gtd_size;
++        if (first >= last) continue;
++        int trained = 0;
++        for (int j = first; j < last; j++) {
++            for (int k = 0; k < MAX_INTERVALS; k++) {
++                if (ssd->lr_nodes[j].brks[k].valid_cnt > 0) {
++                    trained++;
++                    break;
++                }
++            }
++        }
++        open_lines++;
++        open_pages += wp->curline->rest;
++        if (!trained) {
++            untrained_lines++;
++            untrained_pages += wp->curline->rest;
++        } else if (trained < last-first) {
++            partial_lines++;
++        }
++    }
++    femu_log("GC_DONOR phase=%s open_lines=%" PRIu64
++             " open_pages=%" PRIu64 " untrained_lines=%" PRIu64
++             " untrained_pages=%" PRIu64 " partial_lines=%" PRIu64
++             " free_lines=%d\n", phase, open_lines, open_pages,
++             untrained_lines, untrained_pages, partial_lines,
++             ssd->lm.free_line_cnt);
++}
++
++void gc_diag_reset(struct ssd *ssd)
++{
++    cf_reset(ssd);
++    memset(&gc_diag, 0, sizeof(gc_diag));
++    model_bitmap_attempt = model_bitmap_exact = model_bitmap_wrong = 0;
++    gc_diag.min_free = ssd->lm.free_line_cnt;
++    gc_diag.min_victim = ssd->lm.victim_line_cnt;
++    gc_diag_donor_audit(ssd, "before-fio");
++}
++
++static void gc_diag_before_free(struct ssd *ssd, struct line *target)
++{
++    struct line_mgmt *lm = &ssd->lm;
++    struct line *line;
++    int in_free = 0, in_victim = 0;
++    QTAILQ_FOREACH(line, &lm->free_line_list, entry)
++        if (line == target) in_free++;
++    QTAILQ_FOREACH(line, &lm->victim_list, entry)
++        if (line == target) in_victim++;
++    if (in_free || in_victim != 1) {
++        femu_log("GC_BAD_FREE_TARGET id=%d in_free=%d in_victim=%d"
++                 " free_count=%d victim_count=%d\n", target->id,
++                 in_free, in_victim, lm->free_line_cnt, lm->victim_line_cnt);
++        fflush(stdout);
++        abort();
++    }
++}
++
++static bool gc_diag_victim_contains(struct ssd *ssd, struct line *target)
++{
++    struct line *line;
++    QTAILQ_FOREACH(line, &ssd->lm.victim_list, entry)
++        if (line == target) return true;
++    return false;
++}
++
++static void gc_diag_check(struct ssd *ssd, const char *where)
++{
++    struct line_mgmt *lm = &ssd->lm;
++    struct line *line;
++    int free_seen = 0, victim_seen = 0;
++    QTAILQ_FOREACH(line, &lm->free_line_list, entry) free_seen++;
++    QTAILQ_FOREACH(line, &lm->victim_list, entry) victim_seen++;
++    if (free_seen != lm->free_line_cnt || victim_seen != lm->victim_line_cnt) {
++        femu_log("GC_INVARIANT where=%s free_count=%d free_queue=%d"
++                 " victim_count=%d victim_queue=%d\n", where,
++                 lm->free_line_cnt, free_seen, lm->victim_line_cnt, victim_seen);
++        fflush(stdout);
++        abort();
++    }
++}
++
++void gc_diag_report(struct ssd *ssd)
++{
++    cf_report(ssd);
++    gc_diag_donor_audit(ssd, "after-fio");
++    femu_log("GC_DIAG calls=%" PRIu64 " wp=%" PRIu64
++             " trans=%" PRIu64 " low=%" PRIu64 " none=%" PRIu64
++             " alloc=%" PRIu64 " empty=%" PRIu64
++             " empty_with_victim=%" PRIu64 " freed=%" PRIu64
++             " user_writes=%" PRIu64 " gc_writes=%" PRIu64
++             " min_free=%" PRIu64 " min_victim=%" PRIu64
++             " end_free=%d end_victim=%d end_full=%d\n",
++             gc_diag.calls, gc_diag.branch_wp, gc_diag.branch_trans,
++             gc_diag.branch_low, gc_diag.branch_none,
++             gc_diag.alloc_attempt, gc_diag.alloc_empty,
++             gc_diag.alloc_empty_with_victim, gc_diag.freed,
++             gc_diag.user_writes, gc_diag.gc_writes,
++             gc_diag.min_free, gc_diag.min_victim,
++             ssd->lm.free_line_cnt, ssd->lm.victim_line_cnt,
++             ssd->lm.full_line_cnt);
++}
++
+ static int gc_threshold = 5;   // ! gc参数：当一个gtd_wp使用了多少个Line时开始GC
+ static int free_line_threshold = 3;    // ! gc参数：当还剩多少未使用的free_line时开始GC
+ // static int train_num = 0;
+@@ -295,6 +611,9 @@
+ {
+     struct line_mgmt *lm = &ssd->lm;
+     struct line *curline = NULL;
++    gc_diag.alloc_attempt++;
++    if ((uint64_t)lm->free_line_cnt < gc_diag.min_free) gc_diag.min_free = lm->free_line_cnt;
++    if ((uint64_t)lm->victim_line_cnt < gc_diag.min_victim) gc_diag.min_victim = lm->victim_line_cnt;
+     
+     if (gc_flag) {
+         if (lm->free_line_cnt < free_line_threshold) {
+@@ -318,11 +637,15 @@
+ 
+     curline = QTAILQ_FIRST(&lm->free_line_list);
+     if (!curline) {
++        gc_diag.alloc_empty++;
++        if (lm->victim_line_cnt) gc_diag.alloc_empty_with_victim++;
++        ftl_err("GC_EXHAUST free=%d victim=%d full=%d wp=%d wp_vic=%d trans_vic=%d\n", lm->free_line_cnt, lm->victim_line_cnt, lm->full_line_cnt, wpp->id, wpp->vic_cnt, ssd->trans_wp.vic_cnt);
+         ftl_err("No free lines left in [%s]31232131231321 !!!!\n", ssd->ssdname);
+         return;
+     }
+     QTAILQ_REMOVE(&lm->free_line_list, curline, entry);
+     lm->free_line_cnt--;
++    gc_diag_check(ssd, "allocate");
+ 
+     /* wpp->curline is always our next-to-write super-block */
+     wpp->curline = curline;
+@@ -441,12 +764,14 @@
+ 
+ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp) {
+     struct line_mgmt *lm = &ssd->lm;
++    gc_diag.calls++;
+     printf("GC happens?\n");
+     if (ssd->lm.free_line_cnt < 4) {
+         printf("what's wrong?\n");
+     }
+     
+     if (wpp && wpp->vic_cnt >= gc_threshold) {
++        gc_diag.branch_wp++;
+         // if (wpp->id != 256) {
+         //     printf("line %d do batch gc\n", wpp->id);
+         // }
+@@ -467,11 +792,13 @@
+         return true;
+         
+     } else if (ssd->trans_wp.vic_cnt >= gc_threshold) {
++        gc_diag.branch_trans++;
+ 
+         // * 如果gtd写指针的line的数量大于=阈值，对其进行GC
+ 
+         QTAILQ_INSERT_TAIL(&lm->victim_list, ssd->trans_wp.curline, entry);
+         lm->victim_line_cnt++;
++        gc_diag_check(ssd, "trans-victim");
+ 
+         init_line_write_pointer(ssd, &ssd->trans_wp, false);
+ 
+@@ -481,6 +808,7 @@
+         batch_gtd_do_gc(ssd, true, &ssd->trans_wp, ssd->trans_wp.vic_cnt, NULL);
+ 
+     } else if (lm->free_line_cnt < 10) {
++        gc_diag.branch_low++;
+ 
+         struct line *tvl = QTAILQ_FIRST(&lm->victim_list);
+         struct write_pointer *write_back_wp = NULL;
+@@ -502,7 +830,9 @@
+             }
+             if (!tvl) {
+                 tvl = QTAILQ_FIRST(&lm->victim_list);
++                if (!tvl) return false;
+                 write_back_wp = ssd->line2write_pointer[tvl->id];
++                vl = tvl;
+             }
+             if (write_back_wp->vic_cnt == 1) {
+                 printf("???\n");
+@@ -537,10 +867,12 @@
+                         return true;
+                     }
+                 } else {
+-                    if (write_back_wp != wpp) {
++                    if (write_back_wp != wpp && write_back_wp->curline &&
++                        !gc_diag_victim_contains(ssd, write_back_wp->curline)) {
+                         QTAILQ_INSERT_TAIL(&lm->victim_list, write_back_wp->curline, entry);
+                     // printf("batch gtd write id: %d\n", write_back_wp->curline->id);
+                         lm->victim_line_cnt++;
++                        gc_diag_check(ssd, "gc-victim");
+                     }
+                     init_line_write_pointer(ssd, write_back_wp, false);
+                     // write_back_wp->vic_cnt++;
+@@ -576,6 +908,7 @@
+         
+ 
+     }
++    gc_diag.branch_none++;
+     return false;
+ }
+ 
+@@ -649,6 +982,7 @@
+                 
+ 
+                 lm->victim_line_cnt++;
++                gc_diag_check(ssd, "advance-victim");
+ 
+                 // TODO: do the group-borrow work here;
+                 // bool res = borrow_or_gc(ssd, wpp);
+@@ -806,7 +1140,7 @@
+     printf("total pages: %d\n", spp->tt_line_wps);
+ 
+     spp->tt_gtd_size = spp->tt_pgs / spp->ents_per_pg;
+-    spp->tt_cmt_size = 8192;
++    spp->tt_cmt_size = spp->tt_pgs * 15 / 1000; /* paper 1.5% */
+     spp->enable_request_prefetch = true;    /* cannot set false! */
+     spp->enable_select_prefetch = true;
+ 
+@@ -939,6 +1273,7 @@
+         cm->free_cmt_entry_cnt++;
+     }
+     ftl_assert(cm->free_cmt_entry_cnt == cm->tt_entries);
++    cf_init(ssd);
+ 
+     for (int i = 0; i < CMT_HASH_SIZE; i++) {
+         ht->cmt_table[i] = NULL;
+@@ -1168,6 +1503,8 @@
+ 
+     case NAND_WRITE:
+         ssd->stat.write_num++;
++        if (ncmd->type == USER_IO) gc_diag.user_writes++;
++        else gc_diag.gc_writes++;
+         /* write: transfer data through channel first */
+         nand_stime = (lun->next_lun_avail_time < cmd_stime) ? cmd_stime : \
+                      lun->next_lun_avail_time;
+@@ -1500,6 +1837,7 @@
+     tpnode->exist_ent[lpn % spp->ents_per_pg] = 1;
+     cm->used_cmt_entry_cnt++;
+     insert_cmt_hashtable(ht, cmt_entry);
++    cf_alloc(ssd);
+ }
+ 
+ 
+@@ -1582,6 +1920,7 @@
+         }
+     }
+ 
++    cf_return(ssd);
+     return tpnode_evict_flag;
+ }
+ 
+@@ -1961,11 +2300,15 @@
+     line->vpc = 0;
+     line->rest = ssd->sp.pgs_per_line;
+     /* move this line to free line list */
++    gc_diag_check(ssd, "before-free");
++    gc_diag_before_free(ssd, line);
+     QTAILQ_REMOVE(&lm->victim_list, line, entry);
+ 
+     QTAILQ_INSERT_TAIL(&lm->free_line_list, line, entry);
+     lm->victim_line_cnt--;
+     lm->free_line_cnt++;
++    gc_diag_check(ssd, "free");
++    gc_diag.freed++;
+     ssd->line2write_pointer[line->id] = NULL;
+ }
+ 
+@@ -2715,6 +3058,7 @@
+         /* get latency statistics */
+         curlat = ssd_advance_status(ssd, &ppa, &swr);
+         maxlat = (curlat > maxlat) ? curlat : maxlat;
++        cf_write(ssd);
+         // clock_gettime(CLOCK_MONOTONIC, &time2);
+     }
+ 

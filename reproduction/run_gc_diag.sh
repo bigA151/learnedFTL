@@ -26,14 +26,23 @@ warmup_extra=""
 binary="${GC_DIAG_BINARY:-qemu-learnedftl-gc-diag}"
 offset_increment_kib="${GC_OFFSET_INCREMENT_KIB:-487428}"
 [[ "$offset_increment_kib" == 487424 || "$offset_increment_kib" == 487428 ]] || exit 2
-[[ "$binary" == qemu-learnedftl-paper-full || "$binary" == qemu-dftl-paper-full || "$binary" == qemu-tpftl-paper-full || "$binary" == qemu-ideal-paper-full || "$binary" == qemu-leaftl-paper-full || "$binary" == qemu-learnedftl-cross-borrow-greedy || "$binary" == qemu-learnedftl-cross-borrow || "$binary" == qemu-learnedftl-full-gtd-gc || "$binary" == qemu-learnedftl-gc-phys-audit || "$binary" == qemu-learnedftl-gc-donor-audit-v2 || "$binary" == qemu-learnedftl-gc-greedy-guarded || "$binary" == qemu-learnedftl-gc-single-erase || "$binary" == qemu-learnedftl-gc-diag || "$binary" == qemu-learnedftl-gc-fixed || "$binary" == qemu-learnedftl-gc-force-fallback || "$binary" == qemu-learnedftl-gc-force-edge || "$binary" == qemu-learnedftl-paper-gcfix || "$binary" == qemu-learnedftl-paper-gcfix-320lines ]] || exit 2
+[[ "$binary" == qemu-learnedftl-cmt-free-diag || "$binary" == qemu-learnedftl-paper-full || "$binary" == qemu-dftl-paper-full || "$binary" == qemu-tpftl-paper-full || "$binary" == qemu-ideal-paper-full || "$binary" == qemu-leaftl-paper-full || "$binary" == qemu-learnedftl-cross-borrow-greedy || "$binary" == qemu-learnedftl-cross-borrow || "$binary" == qemu-learnedftl-full-gtd-gc || "$binary" == qemu-learnedftl-gc-phys-audit || "$binary" == qemu-learnedftl-gc-donor-audit-v2 || "$binary" == qemu-learnedftl-gc-greedy-guarded || "$binary" == qemu-learnedftl-gc-single-erase || "$binary" == qemu-learnedftl-gc-diag || "$binary" == qemu-learnedftl-gc-fixed || "$binary" == qemu-learnedftl-gc-force-fallback || "$binary" == qemu-learnedftl-gc-force-edge || "$binary" == qemu-learnedftl-paper-gcfix || "$binary" == qemu-learnedftl-paper-gcfix-320lines ]] || exit 2
 [[ -x "bin/$binary" ]] || { echo "Build the GC diagnostic binary first." >&2; exit 2; }
+# These diagnostic builds have defaulted to 32 since enable_borrow(). Make
+# the effective default explicit so the binary prints it at startup.
+case "$binary" in
+  qemu-learnedftl-cross-borrow|qemu-learnedftl-cross-borrow-greedy)
+    export CG_EARLY_GC_FREE="${CG_EARLY_GC_FREE:-32}" ;;
+esac
 if (echo >/dev/tcp/127.0.0.1/2222) >/dev/null 2>&1; then
   echo "FEMU port 2222 is occupied; wait for the current experiment." >&2; exit 2
 fi
 id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 out="results/diagnostics/gc-$id"
 mkdir -p "$out"
+if [[ "$binary" == qemu-learnedftl-cmt-free-diag ]]; then
+  export CMT_FREE_DUMP_PREFIX="$base/$out/cmt-free"
+fi
 python3 - "$out" "$base" "$binary" "$fs_type" <<'PY_MANIFEST'
 import hashlib, json, sys
 from pathlib import Path
@@ -42,6 +51,8 @@ base = Path(base).resolve()
 files = {
     'binary': base / 'bin' / binary,
     'build_script': base / 'build_gc_diag.py',
+    'cmt_free_patch': base / 'cmt_free_patch.py',
+    'cmt_free_instrumentation': base / 'cmt_free_diag.inc',
     'cross_group_patch': base / 'cross_group_patch.py',
     'validator': base / 'validate_cross_group.py',
     'runner': base / 'run_gc_diag.sh',
@@ -196,6 +207,11 @@ grep -E 'GC_DIAG|GC_DONOR|GC_EXHAUST' "$qemu_log" > "$out/gc-summary.log" || tru
 python3 - "$out" "$passes" "$warmup_io_mib" "$runtime" "$fio_rc" "$report_rc" "$image" "$binary" "${jobs:-64}" "$pattern" "$warmup_pattern" "$offset_increment_kib" <<'PY'
 import json,sys
 p,passes,warmup_io_mib,runtime,fio_rc,report_rc,image,binary,jobs,pattern,warmup_pattern,offset_increment_kib=sys.argv[1:]
+import os, re
+thresholds = re.findall(r'CG_EARLY_GC_FREE threshold=(\d+)', open(p+'/qemu.log').read())
+if len(set(thresholds)) > 1:
+    raise RuntimeError('conflicting effective GC thresholds in qemu.log')
+effective_gc_threshold = int(thresholds[-1]) if thresholds else None
 with open(p+'/method.json','w') as f:
  json.dump({'binary':binary,'warmup_passes':int(passes),'warmup_pattern':warmup_pattern,
             'warmup_bytes':int(warmup_io_mib)*1048576,'fio_bs':'4k',
@@ -204,7 +220,7 @@ with open(p+'/method.json','w') as f:
             'fio_returncode':int(fio_rc),'report_returncode':int(report_rc),
             'address_layout':'explicit-per-job-end-v1' if __import__('os').environ.get('GC_EXPLICIT_RANGES')=='1' else 'legacy-global-filesize',
             'jobfile_sha256':__import__('hashlib').sha256(open(p+'/measure.fio','rb').read()).hexdigest() if __import__('os').path.exists(p+'/measure.fio') else None,
-            'guest_image':image,'pair_trigger':int(__import__('os').environ.get('CG_BORROW_PAIR_TRIGGER','8192')),'allow_multi':bool(__import__('os').environ.get('CG_BORROW_ALLOW_MULTI')),'allow_low_free':bool(__import__('os').environ.get('CG_ALLOW_LOW_FREE')),'borrow_sticky':bool(__import__('os').environ.get('CG_BORROW_STICKY')),'donor_limit':int(__import__('os').environ.get('CG_BORROW_DONOR_LIMIT','256')),'max_active_borrowers':int(__import__('os').environ.get('CG_BORROW_MAX_ACTIVE','256')),'early_gc_free':int(__import__('os').environ.get('CG_EARLY_GC_FREE','3')),'post_read':bool(int(__import__('os').environ.get('GC_POST_READ','0'))),'post_read_full':bool(int(__import__('os').environ.get('GC_POST_READ_FULL','0'))),'assert_model_bitmap':bool(__import__('os').environ.get('CG_ASSERT_MODEL_BITMAP')),'test_budget_free':__import__('os').environ.get('CG_TEST_BUDGET_FREE'),'test_fail_target_at':__import__('os').environ.get('CG_TEST_FAIL_TARGET_AT')},f,indent=2)
+            'guest_image':image,'pair_trigger':int(__import__('os').environ.get('CG_BORROW_PAIR_TRIGGER','8192')),'allow_multi':bool(__import__('os').environ.get('CG_BORROW_ALLOW_MULTI')),'allow_low_free':bool(__import__('os').environ.get('CG_ALLOW_LOW_FREE')),'borrow_sticky':bool(__import__('os').environ.get('CG_BORROW_STICKY')),'donor_limit':int(__import__('os').environ.get('CG_BORROW_DONOR_LIMIT','256')),'max_active_borrowers':int(__import__('os').environ.get('CG_BORROW_MAX_ACTIVE','256')),'early_gc_free':effective_gc_threshold,'early_gc_free_requested':int(os.environ['CG_EARLY_GC_FREE']) if 'CG_EARLY_GC_FREE' in os.environ else None,'early_gc_free_source':'qemu-startup-log' if thresholds else 'unobserved','post_read':bool(int(__import__('os').environ.get('GC_POST_READ','0'))),'post_read_full':bool(int(__import__('os').environ.get('GC_POST_READ_FULL','0'))),'assert_model_bitmap':bool(__import__('os').environ.get('CG_ASSERT_MODEL_BITMAP')),'test_budget_free':__import__('os').environ.get('CG_TEST_BUDGET_FREE'),'test_fail_target_at':__import__('os').environ.get('CG_TEST_FAIL_TARGET_AT')},f,indent=2)
  f.write('\n')
 PY
 echo "Done: $base/$out (fio=$fio_rc, report=$report_rc)"
@@ -215,11 +231,15 @@ j=json.load(open(sys.argv[1]))['jobs'][0]
 assert j['error']==0 and j['write']['io_bytes']>0
 print(f"Validated fio: {j['write']['bw_bytes']/1048576:.4f} MiB/s, {j['write']['iops']:.1f} IOPS")
 PY_VALIDATE
-if grep -Eq 'GC_EXHAUST|No free lines left|buduijin|CG_NO_REST|GC_INVARIANT|GC_BAD_FREE_TARGET|PHYS_ID_MISMATCH' "$qemu_log"; then
+if grep -Eq 'GC_EXHAUST|No free lines left|buduijin|CG_NO_REST|GC_INVARIANT|GC_BAD_FREE_TARGET|PHYS_ID_MISMATCH|CMT_FREE_INVARIANT|CMT_FREE_DUMP_ERROR' "$qemu_log"; then
   echo "GC/allocator fault in $qemu_log" >&2
   exit 1
 fi
 if [[ "$binary" != *-paper-full && "$binary" != qemu-learnedftl-paper-gcfix && "$binary" != qemu-learnedftl-paper-gcfix-320lines ]] && ! grep -q 'GC_DIAG' "$out/gc-summary.log"; then
   echo "Missing GC_DIAG completion report in $out/gc-summary.log" >&2
   exit 1
+fi
+
+if [[ "$binary" == qemu-learnedftl-cmt-free-diag ]]; then
+  grep -q 'CMT_FREE_DONE.*dropped=0' "$qemu_log" || { echo "Missing/incomplete CMT free-list dump" >&2; exit 1; }
 fi

@@ -425,6 +425,14 @@ static void phys_audit_move(struct ssd *ssd, uint64_t lpn, struct ppa *ppa)
                 original[C].splitlines(keepends=True), c.splitlines(keepends=True),
                 fromfile="a/hw/femu/bbssd/ld-tpftl.c",
                 tofile="b/hw/femu/bbssd/ld-tpftl.c")))
+        cmt_free = os.environ.get("GC_DIAG_CMT_FREE") == "1"
+        if cmt_free:
+            import cmt_free_patch
+            c = cmt_free_patch.apply(c)
+            (BASE / "learnedftl-cmt-free-diag.patch").write_text("".join(difflib.unified_diff(
+                original[C].splitlines(keepends=True), c.splitlines(keepends=True),
+                fromfile="a/hw/femu/bbssd/ld-tpftl.c",
+                tofile="b/hw/femu/bbssd/ld-tpftl.c")))
         C.write_text(c)
         H.write_text(original[H] + "\nvoid gc_diag_reset(struct ssd *ssd);\nvoid gc_diag_report(struct ssd *ssd);\n")
         clean_bb = subprocess.check_output(["git","show","HEAD:hw/femu/bbssd/bb.c"],cwd=SRC,text=True)
@@ -439,7 +447,8 @@ static void phys_audit_move(struct ssd *ssd, uint64_t lpn, struct ppa *ppa)
         with log.open("w") as out:
             subprocess.run(["make","-C",str(SRC/"build-femu"),"-j4"],
                            stdout=out,stderr=subprocess.STDOUT,check=True)
-        target = BASE / ("bin/qemu-learnedftl-cross-borrow-greedy" if cross_borrow and greedy_group else
+        target = BASE / ("bin/qemu-learnedftl-cmt-free-diag" if cmt_free else
+                         "bin/qemu-learnedftl-cross-borrow-greedy" if cross_borrow and greedy_group else
                          "bin/qemu-learnedftl-cross-borrow" if cross_borrow else
                          "bin/qemu-learnedftl-gc-force-edge" if force_edge else
                          "bin/qemu-learnedftl-gc-force-fallback" if force_fallback else

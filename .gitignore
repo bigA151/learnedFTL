@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.o
+*.qcow2
+*.iso
+*.pem
+*ed25519*
+reproduction/plot-libs/
+reproduction/remote-publish/

@@ -1,0 +1,53 @@
+{
+  "status": "passed",
+  "paper_binary_sha256": "a6b717d37f247baba6076bd82f9479a032951b19e62a3fd3c103155b1a8096ef",
+  "diagnostic_binary_sha256": "7c87bacf2a5ef3a20b4748e46b32ab55582202fca33bd10f7c1c43a2098d5867",
+  "only_geometry_differs": true,
+  "exit_code": 0,
+  "scope": "96 MiB namespace, six actual CRC-verified write passes, random read and GC counter",
+  "limitations": "Logical payload backend; baseline internals not exhaustively checked.",
+  "run_directory": "/home/zheng/桌面/代码/learnedFTL/reproduction/vm-smoke-ideal-20261011T155805Z",
+  "method": {
+    "purpose": "correctness smoke; not paper performance",
+    "acceleration": "kvm",
+    "variant": "ideal",
+    "namespace_bytes": 100663296,
+    "physical_geometry": "4ch/4lun/32blk/64pg/4KiB",
+    "build": {
+      "variant": "ideal",
+      "binary": "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/ideal/qemu-ideal",
+      "base_build": "/home/zheng/FEMU-ext4/reproduction/upstream/build-femu",
+      "sha256": "7c87bacf2a5ef3a20b4748e46b32ab55582202fca33bd10f7c1c43a2098d5867",
+      "sources": {
+        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/ideal/femu/bbssd/ftl.c": "a1d32606178a4cdf8fb8187d885e39cdaa94e8da193386afd0541d5bc885a712",
+        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/ideal/femu/bbssd/ftl.h": "09cd29c7a470c279cff57fcaa492af3f13d883e7cfe2cd1dbb9b7179d8e20a24",
+        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/ideal/femu/bbssd/bb.c": "8121257e0725e7b002bfd2372cef3d82db461f25d4ccef89a3668adeb6bf50a4",
+        "/home/zheng/FEMU-ext4/reproduction/build_paper.py": "d64a53bbd68a73a7966f9b7aa679203797650430625414825a59d2d7a4015b10"
+      },
+      "notes": "Existing parameter/minimal diagnostic corrections; baseline mechanisms require separate validation.",
+      "physical_bytes": 134217728,
+      "geometry": "4ch/4lun/32blk/64pg/4KiB",
+      "paper_binary_sha256": "a6b717d37f247baba6076bd82f9479a032951b19e62a3fd3c103155b1a8096ef",
+      "diagnostic_only": true,
+      "geometry_overrides": [
+        "nchs",
+        "luns_per_ch",
+        "blks_per_pl",
+        "pgs_per_blk"
+      ]
+    },
+    "status": "passed",
+    "metrics": {
+      "access": "0",
+      "cmt_hit": "0",
+      "cmt_miss": "0",
+      "model_hit": "0",
+      "model_use": "0",
+      "gc": "15360",
+      "writes": "1007616",
+      "read_energy": "3623672.500",
+      "write_energy": "16827187.200",
+      "erase_energy": "2027520.000"
+    }
+  }
+}

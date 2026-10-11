@@ -1,0 +1,355 @@
+--- a/bbssd/leaftl.c
++++ b/bbssd/leaftl.c
+@@ -1344,8 +1344,6 @@
+ static int do_gc(struct ssd *ssd, bool force)
+ {
+ 
+-    printf("DO_GC\n");
+-    ssd->stat.gc_cnt++;
+     struct line *victim_line = NULL;
+     struct ssdparams *spp = &ssd->sp;
+     struct nand_lun *lunp;
+@@ -1360,6 +1358,7 @@
+         return -1;
+     }
+ 
++    ssd->stat.gc_cnt++;
+     ppa.g.blk = victim_line->id;
+     ftl_debug("GC-ing line:%d,ipc=%d,victim=%d,full=%d,free=%d\n", ppa.g.blk,
+               victim_line->ipc, ssd->lm.victim_line_cnt, ssd->lm.full_line_cnt,
+@@ -1411,7 +1410,7 @@
+     segment_param* sp = g_malloc0(sizeof(segment_param));
+     sp->buffer_len = 2048;
+     sp->mapping_per_page = 256;
+-    sp->page_total_cnt = 8388608;
++    sp->page_total_cnt = ssd->sp.tt_pgs;
+     sp->threshold = 10;
+     sp->sgement_cnt = sp->page_total_cnt/sp->mapping_per_page;
+ 
+@@ -1441,7 +1440,13 @@
+     }
+ 
+ 
+-    LeastSquare(off_x, off_y, len, &k, &b);
++    /* A singleton has a constant, exact mapping; OLS would divide by zero. */
++    if (len == 1) {
++        k = 0;
++        b = 0;
++    } else {
++        LeastSquare(off_x, off_y, len, &k, &b);
++    }
+     
+     sg->is_accurate = flag;
+ 
+@@ -1466,7 +1471,7 @@
+     sg->k = k;                          // * k是斜率
+     sg->len = lpns[len-1] - lpns[0];    // * len是这一段能索引的最大长度
+     sg->slpa = lpns[0]-group_start;     // * slpa是这一段距离group起点的距离
+-    sg->inter = b + start_ppn;          // * b需要加上起始的PPN
++    sg->inter = b + start_ppn - k * sg->slpa;          // * b需要加上起始的PPN
+ }
+ 
+ static uint64_t get_upper_lpn_bound(simple_segment* sg) {
+@@ -1509,7 +1514,6 @@
+     } else {
+         cr_bm* tmp = lm->crb->crb_unit[seg_no];
+         int i;
+-        int flag = 0;
+         while (tmp) {
+             for (i = 0; i < tmp->cnt; i++) {
+                 if (tmp->record[i] == lpn) {
+@@ -1527,7 +1531,7 @@
+         if (flag) {
+             simple_segment* crb_sm = tmp->to_sm;
+             *ppn = crb_sm->k * off_lpn + crb_sm->inter;
+-            lru_en = crb_sm;
++            *lru_en = *crb_sm;
+         }
+     }
+ 
+@@ -1543,43 +1547,15 @@
+         sg->segment_head = new_seg;
+         new_seg->next = NULL;
+     } else {
+-        uint64_t sg_lb = get_lower_lpn_bound(sg->segment_head); 
+-        // uint64_t sg_ub = get_upper_lpn_bound(sg->segment_head);
+-
+-        if (end_lpn < sg_lb) {
+-            new_seg->next = sg->segment_head;
+-            sg->segment_head = new_seg;
+-
+-            return NULL;
+-        }
+-
+-        simple_segment* p = sg->segment_head;
+-        simple_segment* q = sg->segment_head->next;
+-        
+-        while (q) {
+-            
+-            uint64_t p_ub = get_upper_lpn_bound(p);
+-            uint64_t q_lb = get_lower_lpn_bound(q);
+-            uint64_t q_ub = get_upper_lpn_bound(q);
+-
+-            if (end_lpn < q_lb && start_lpn > p_ub) {
+-                new_seg->next = q;
+-                p->next = new_seg;
+-                break;
+-            } else if(start_lpn > q_ub) {
+-                q = q->next;
+-                p = p->next;
+-                if (q == NULL) {
+-                    p->next = new_seg;
+-                    break;
+-                }
+-            } else {
+-                // TODO: overlap
+-                // TODO 目前只处理返回的情况，还需要处理新建新的segment的情况
+-                return sg;
+-            }
+-        }
+-        
++        /* Insert a disjoint interval, or place an overlapping batch in a
++         * newer level so that the previous mappings remain available. */
++        simple_segment **link = &sg->segment_head;
++        while (*link && get_upper_lpn_bound(*link) < start_lpn)
++            link = &(*link)->next;
++        if (*link && get_lower_lpn_bound(*link) <= end_lpn)
++            return sg;
++        new_seg->next = *link;
++        *link = new_seg;
+     }
+ 
+     return NULL;
+@@ -1608,7 +1584,7 @@
+     
+     while (sm) {
+         if (sm->is_accurate) {
+-            for (int i = sm->slpa; i < sm->slpa+sm->len; i++) {
++            for (int i = sm->slpa; i <= sm->slpa+sm->len; i++) {
+                 valid_lpns[i] = 1;
+             }
+         } else {
+@@ -1622,7 +1598,7 @@
+ 
+                 for (int i = 0; i < tmp->cnt; i++) {
+                     if (tmp->record[i] - slpa < 256)
+-                        valid_lpns[tmp->record[i]-slpa] = 0;
++                        valid_lpns[tmp->record[i]-slpa] = 1;
+                 }
+             }
+         }
+@@ -1933,20 +1909,41 @@
+ 
+ }
+ 
++/* Train every sample once; never cross a LeaFTL mapping-page boundary. */
++static void train_mapping_batch(learned_mgmt *lm, uint64_t *lpns,
++                                uint64_t *ppns, int count)
++{
++    int first = 0;
++    for (int end = 1; end <= count; end++) {
++        bool boundary = end == count;
++        if (!boundary) {
++            boundary = lpns[end] - lpns[end - 1] > lm->sp->threshold ||
++                       end - first >= TRAIN_LEN ||
++                       lpns[end] / lm->sp->mapping_per_page !=
++                           lpns[end - 1] / lm->sp->mapping_per_page;
++        }
++        if (boundary) {
++            flush_lpn_ppn_mappings(lm, lpns + first, ppns + first, end - first);
++            for (int i = first; i < end; i++) lm->bitmap[lpns[i]] = 1;
++            first = end;
++        }
++    }
++}
++
+ static void GC_flush(struct ssd *ssd, uint64_t* buffer_lpns, int pointer) {
+ 
+     learned_mgmt* lm = ssd->lem;
+     struct ssdparams* sp = &ssd->sp;
+     const int buffer_size = pointer;
++    if (buffer_size == 0) return;
+     const int gtd_cnt = ssd->sp.tt_gtd_size;
+     struct ppa ppa;
+ 
+-    int threshold = lm->sp->threshold;
+     // TODO get PPNs for these LPNs
+     struct ppa wppa[buffer_size];
+     uint64_t vppn[buffer_size];
+     uint64_t lpns[buffer_size];
+-    uint64_t gtd_to_update[gtd_cnt];
++    bool gtd_to_update[gtd_cnt];
+     memset(gtd_to_update, 0, sizeof(gtd_to_update));
+ 
+ 
+@@ -1972,15 +1969,15 @@
+         vppn[i] = ppa2vppn(ssd, &wppa[i]);
+ 
+         // * 记录需要更新的translation page
+-        int gtd_index = ssd->buffer_lpns[i]/ssd->sp.ents_per_pg;
+-        gtd_to_update[gtd_index] = ssd->buffer_lpns[i];
++        int gtd_index = lpns[i] / sp->ents_per_pg;
++        gtd_to_update[gtd_index] = true;
+     }
+ 
+ 
+     // * 更新translation pages
+     for (int i = 0; i < gtd_cnt; i++) {
+         if (gtd_to_update[i] != 0) {
+-            uint64_t tvpn = gtd_to_update[i] / sp->ents_per_pg;
++            uint64_t tvpn = i;
+             ppa = get_gtd_ent(ssd, tvpn);
+             /* if no correspond translation page, write new page, else, 
+             read old translation page and then write new page */
+@@ -2009,7 +2006,7 @@
+         
+         struct nand_cmd gcr;
+         gcr.type = GC_IO;
+-        gcr.cmd = NAND_READ;
++        gcr.cmd = NAND_WRITE;
+         gcr.stime = 0;
+         ssd_advance_status(ssd, &wppa[i], &gcr);
+         
+@@ -2017,38 +2014,7 @@
+     }
+ 
+ 
+-    int last_pointer = 0;
+-
+-    // * 开始进行学习
+-    
+-    for (int i = 0; i < buffer_size; i++) {
+-        lm->bitmap[lpns[i]] = 1;
+-        
+-        if (i > 0) {
+-            if (lpns[i] - lpns[i-1] > threshold || (i-last_pointer >= TRAIN_LEN) || i == buffer_size-1) {
+-                // * start builing one segment
+-                int len = i - last_pointer;
+-
+-                if (len > 256) {
+-                    printf("1\n");
+-                }
+-                uint64_t *new_ppn = g_malloc0(sizeof(uint64_t)*len);
+-                uint64_t *new_lpn = g_malloc0(sizeof(uint64_t)*len);
+-
+-                memcpy(new_ppn,  vppn+last_pointer, sizeof(uint64_t)*len);
+-                memcpy(new_lpn,  lpns+last_pointer, sizeof(uint64_t)*len);
+-
+-                // all_seg_mgmt_insert_mappings(all_segs, sp, new_lpn, new_ppn, len, lm);
+-                flush_lpn_ppn_mappings(lm, new_lpn, new_ppn, len);
+-
+-                g_free(new_lpn);
+-                g_free(new_ppn);
+-
+-                last_pointer = i;
+-            }
+-        }
+-    }
+-
++    train_mapping_batch(lm, lpns, vppn, buffer_size);
+ 
+ }
+ 
+@@ -2066,12 +2032,11 @@
+     struct ppa ppa;
+     uint64_t sublat = 0, maxlat = 0;
+ 
+-    int threshold = lm->sp->threshold;
+     // TODO get PPNs for these LPNs
+     struct ppa wppa[buffer_size];
+     uint64_t vppn[buffer_size];
+     uint64_t lpns[buffer_size];
+-    uint64_t gtd_to_update[gtd_cnt];
++    bool gtd_to_update[gtd_cnt];
+     memset(gtd_to_update, 0, sizeof(gtd_to_update));
+ 
+ 
+@@ -2097,15 +2062,15 @@
+         vppn[i] = ppa2vppn(ssd, &wppa[i]);
+ 
+         // * 记录需要更新的translation page
+-        int gtd_index = ssd->buffer_lpns[i]/ssd->sp.ents_per_pg;
+-        gtd_to_update[gtd_index] = ssd->buffer_lpns[i];
++        int gtd_index = lpns[i] / sp->ents_per_pg;
++        gtd_to_update[gtd_index] = true;
+     }
+ 
+ 
+     // * 更新translation pages
+     for (int i = 0; i < gtd_cnt; i++) {
+         if (gtd_to_update[i] != 0) {
+-            uint64_t tvpn = gtd_to_update[i] / sp->ents_per_pg;
++            uint64_t tvpn = i;
+             ppa = get_gtd_ent(ssd, tvpn);
+             /* if no correspond translation page, write new page, else, 
+             read old translation page and then write new page */
+@@ -2134,7 +2099,7 @@
+         if (req == NULL) {
+             struct nand_cmd gcr;
+             gcr.type = GC_IO;
+-            gcr.cmd = NAND_READ;
++            gcr.cmd = NAND_WRITE;
+             gcr.stime = 0;
+             ssd_advance_status(ssd, &wppa[i], &gcr);
+         } else {
+@@ -2149,35 +2114,7 @@
+     }
+ 
+ 
+-    int last_pointer = 0;
+-
+-    // * 开始进行学习
+-    
+-    for (int i = 0; i < buffer_size; i++) {
+-        lm->bitmap[lpns[i]] = 1;
+-        
+-        if (i > 0) {
+-            if (lpns[i] - lpns[i-1] > threshold || (i-last_pointer >= TRAIN_LEN) || i == buffer_size-1 || lpns[i]/lm->sp->mapping_per_page != lpns[i-1]/lm->sp->mapping_per_page) {
+-                // * start builing one segment
+-                int len = i - last_pointer;
+-
+-                uint64_t *new_ppn = g_malloc0(sizeof(uint64_t)*len);
+-                uint64_t *new_lpn = g_malloc0(sizeof(uint64_t)*len);
+-
+-                memcpy(new_ppn,  vppn+last_pointer, sizeof(uint64_t)*len);
+-                memcpy(new_lpn,  lpns+last_pointer, sizeof(uint64_t)*len);
+-
+-                // all_seg_mgmt_insert_mappings(all_segs, sp, new_lpn, new_ppn, len, lm);
+-                flush_lpn_ppn_mappings(lm, new_lpn, new_ppn, len);
+-
+-                g_free(new_lpn);
+-                g_free(new_ppn);
+-
+-                last_pointer = i;
+-            }
+-        }
+-    }
+-
++    train_mapping_batch(lm, lpns, vppn, buffer_size);
+ 
+     return maxlat;
+ }
+@@ -2432,12 +2369,14 @@
+ 
+     for (lpn = start_lpn; lpn <= end_lpn; lpn++) {
+         st->write_cnt++;
++        update_in_buffer = false;
+ 
+         if (ssd->lem->bitmap[lpn]) {
+             ppa = get_maptbl_ent(ssd, lpn);
+             if (mapped_ppa(&ppa)) {
+                 mark_page_invalid(ssd, &ppa);
+                 set_rmap_ent(ssd, INVALID_LPN, &ppa);
++                ssd->lem->bitmap[lpn] = 0;
+             }
+         }
+ 
+@@ -2447,7 +2386,7 @@
+             // TODO: compact结束之后执行GC
+         }
+         
+-        for (int i = 0; i < ssd->sp.buffer_size; i++) {
++        for (int i = 0; i < ssd->buffer_pointer; i++) {
+             if (ssd->buffer_lpns[i] == lpn) {
+                 update_in_buffer = true;
+                 break;

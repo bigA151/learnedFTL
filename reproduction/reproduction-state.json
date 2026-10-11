@@ -1,0 +1,16 @@
+{
+  "goal": "逐项补全 ld-tpftl 并复现论文机制和性能",
+  "status": "active",
+  "correctness": "Current source passed complete ASan/UBSan regression (including near-capacity and pressure borrowing) and current-binary FEMU CRC/GC/model-path smoke.",
+  "paper_run": "Full corrected-source sequential write failed during run2: insufficient paired-GC reserve; raw failure preserved.",
+  "remaining": [
+    "Repair global reserve exhaustion with active borrowing pairs and validate native/full-size regressions",
+    "Complete Fig14 four FIO patterns across all five FTLs, three measurement windows per case",
+    "Generate Fig14-style throughput, hit-ratio and WAF plots from validated raw data",
+    "Push final code changes after reproduction"
+  ],
+  "baselines": "All four basic CRC/GC smokes passed; LeaFTL source defects repaired and smoke revalidated.",
+  "new_issue": "Reproduced full-size failure with 64 interleaved writers after a partial first pass; global free-line reserve reaches zero while pairs remain active. Repair in progress.",
+  "current_smoke": "vm-smoke-learnedftl-20261011T155426Z: passed",
+  "push_policy": "Push current snapshot now; after full Fig14 reproduction, push code changes again and publish measured plots/data."
+}

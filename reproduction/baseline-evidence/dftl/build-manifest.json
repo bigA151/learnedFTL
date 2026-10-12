@@ -1,0 +1,13 @@
+{
+  "variant": "dftl",
+  "binary": "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/dftl/qemu-dftl",
+  "base_build": "/home/zheng/FEMU-ext4/reproduction/upstream/build-femu",
+  "sha256": "97971356ce12b06e3b8cf03aa66230ce6d6de8436b0b002b2a4066e1a17e96e1",
+  "sources": {
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/dftl/femu/bbssd/dftl.c": "317ea8ad172af84ff9d3384837458a1ac633edadf6deb5aa9531a8e5e2191678",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/dftl/femu/bbssd/dftl.h": "f260d81d814584af36c56af951b39d26e71027fb7772e75b70da2f56b9421123",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/dftl/femu/bbssd/bb.c": "8b2ebbf93b21a7f3ab18076a35ad23d477f690ae04bf719dc04aef4665cb4dbd",
+    "/home/zheng/FEMU-ext4/reproduction/build_paper.py": "d64a53bbd68a73a7966f9b7aa679203797650430625414825a59d2d7a4015b10"
+  },
+  "notes": "Existing parameter/minimal diagnostic corrections; baseline mechanisms require separate validation."
+}

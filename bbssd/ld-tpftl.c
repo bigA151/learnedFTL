@@ -807,6 +807,14 @@ static bool should_do_gc_v3(struct ssd *ssd, struct write_pointer *wpp)
             int writes = targets * ssd->sp.trans_per_line;
             int metadata = writes >= ssd->trans_wp.curline->rest;
             if (ssd->lm.free_line_cnt < targets + metadata) continue;
+            /* 回收其他组必须净释放 line，caller 随后还要分配自己的目标。
+             * 成对组可能仅有两个源 line；整理到两个目标虽能清无效页，
+             * 却不增加 free line，不能据此继续消耗全局 GC 备用空间。
+             * 若直接重建 caller，则它使用整理后的 current，无需额外目标。 */
+            int sources = candidate->vic_cnt +
+                          (candidate->borrow_peer ? candidate->borrow_peer->vic_cnt : 0);
+            bool rebuilds_caller = candidate == wpp || candidate->borrow_peer == wpp;
+            if (!rebuilds_caller && sources <= targets + metadata) continue;
             if (invalid > most_invalid) {
                 most_invalid = invalid;
                 selected = candidate;
@@ -2449,13 +2457,13 @@ static void gc_read_page(struct ssd *ssd, struct ppa *ppa)
 
 /* GC 数据写：同步真值、反向表、CMT 和 bitmap，随后模拟 NAND 编程。 */
 static uint64_t gc_write_page_through_line_wp(struct ssd *ssd, uint64_t lpn,
-                                            struct ppa *new_ppa, struct write_pointer *wpp)
+                                            struct ppa *new_ppa, struct write_pointer *wpp,
+                                            uint64_t source_ready)
 {
     if (wpp->curline->rest < ssd->sp.pgs_per_line) {
         advance_line_write_pointer(ssd, wpp);
     }
     struct ppa old = get_maptbl_ent(ssd, lpn);
-    uint64_t source_ready = mapped_ppa(&old) ? get_lun(ssd, &old)->next_lun_avail_time : 0;
     *new_ppa = get_new_line_page(ssd, wpp);
     if (mapped_ppa(&old) && valid_ppa(ssd, &old)) {
         if (get_pg(ssd, &old)->status == PG_VALID) {
@@ -2722,7 +2730,8 @@ static void gc_flush_translation_page(struct ssd *ssd, int gtd_index)
 
 /* 论文 III-E2：排序、搬移、贪心分段回归、逐页评估。固定最多八段，不漏余数/末项。 */
 static void model_training(struct ssd *ssd, struct write_pointer *wpp,
-                           uint64_t *group_lpns, int *counts, int start_gtd)
+                           uint64_t *group_lpns, int *counts, int start_gtd,
+                           const uint64_t *read_ready)
 {
     struct ssdparams *spp = &ssd->sp;
     uint64_t *x = g_new(uint64_t, spp->ents_per_pg);
@@ -2750,7 +2759,8 @@ static void model_training(struct ssd *ssd, struct write_pointer *wpp,
         uint64_t base = UINT64_MAX;
         for (int i = 0; i < n; i++) {
             struct ppa moved;
-            gc_write_page_through_line_wp(ssd, lpns[i], &moved, wpp);
+            gc_write_page_through_line_wp(ssd, lpns[i], &moved, wpp,
+                read_ready[lpns[i] - (uint64_t)start_gtd * spp->ents_per_pg]);
             x[i] = lpns[i] - lpns[0];
             y[i] = ppa2vppn(ssd, &moved);
             if (y[i] < base) {
@@ -2835,11 +2845,13 @@ static int batch_line_do_gc(struct ssd *ssd, bool force, struct write_pointer *w
     int capacity = wpp->vic_cnt + (groups[1] ? groups[1]->vic_cnt : 0);
     struct line **sources = g_new(struct line *, capacity);
     uint64_t *lpns[2] = { NULL, NULL };
+    uint64_t *read_ready[2] = { NULL, NULL };
     int *counts[2] = { NULL, NULL };
     int result = -1;
     int tp_writes = 0;
     for (int g = 0; g < group_count; g++) {
         lpns[g] = g_new(uint64_t, p->trans_per_line * p->ents_per_pg);
+        read_ready[g] = g_new0(uint64_t, p->trans_per_line * p->ents_per_pg);
         counts[g] = g_new0(int, p->trans_per_line);
         for (struct wp_lines *link = groups[g]->wpl->next; link; link = link->next) {
             sources[source_count++] = link->line;
@@ -2885,8 +2897,12 @@ static int batch_line_do_gc(struct ssd *ssd, bool force, struct write_pointer *w
             struct ppa tp = ssd->gtd[start + slot];
             if (mapped_ppa(&tp)) gc_read_page(ssd, &tp);
             for (int j = 0; j < counts[g][slot]; j++) {
-                struct ppa data = get_maptbl_ent(ssd, lpns[g][slot * p->ents_per_pg + j]);
+                uint64_t lpn = lpns[g][slot * p->ents_per_pg + j];
+                struct ppa data = get_maptbl_ent(ssd, lpn);
                 gc_read_page(ssd, &data);
+                /* 固定本页 READ 的完成时间；后续目标写不得改变这项依赖。 */
+                read_ready[g][lpn - (uint64_t)start * p->ents_per_pg] =
+                    get_lun(ssd, &data)->next_lun_avail_time;
             }
         }
         seal_current_line(ssd, groups[g]);
@@ -2894,7 +2910,8 @@ static int batch_line_do_gc(struct ssd *ssd, bool force, struct write_pointer *w
     ssd->gc_in_progress = true;
     for (int g = 0; g < group_count; g++) init_line_write_pointer(ssd, groups[g], false);
     for (int g = 0; g < group_count; g++) {
-        model_training(ssd, groups[g], lpns[g], counts[g], groups[g]->id * p->trans_per_line);
+        model_training(ssd, groups[g], lpns[g], counts[g],
+                       groups[g]->id * p->trans_per_line, read_ready[g]);
         groups[g]->trained = true;
     }
     for (int i = 0; i < source_count; i++) {
@@ -2918,7 +2935,9 @@ static int batch_line_do_gc(struct ssd *ssd, bool force, struct write_pointer *w
     ssd->gc_in_progress = false;
     result = 0;
  done:
-    for (int g = 0; g < group_count; g++) { g_free(counts[g]); g_free(lpns[g]); }
+    for (int g = 0; g < group_count; g++) {
+        g_free(counts[g]); g_free(lpns[g]); g_free(read_ready[g]);
+    }
     g_free(sources);
     return result;
 }

@@ -1,0 +1,19 @@
+{
+  "case": "/home/zheng/桌面/代码/learnedFTL/reproduction/paper-learnedftl-read-20261012T033826Z",
+  "time_local": "2026-10-12 12:18:28 +0800",
+  "signal": "SIGSEGV (kernel log)",
+  "instruction_relative_address": "0x474ce3",
+  "symbol": "nvme_process_cq_cpl",
+  "base_source": "/home/zheng/FEMU-ext4/reproduction/upstream/hw/femu/nvme-io.c:151",
+  "kernel_log": "qemu-learnedftl[1005918]: segfault at 7ad884071fb0 ip 0000584633fdace3 sp 00007ad049ace8a0 error 4 in qemu-learnedftl-e58ef2499157ebab[474ce3,584633e46000+627000]",
+  "hypothesis": "Long queued GC requests and NVMe timeouts confirmed. Queue reset/use-after-free remains an inference for the six-pass SIGSEGV; one-pass case completed despite timeouts. Do not call queue lifecycle repaired.",
+  "native_timeline": "native-parallel-gc-full/native-results.log: maximum 32247.840 ms after 148 submissions, no sanitizer or invariant failure.",
+  "short_diagnostic": {
+    "case": "paper-learnedftl-write-20261012T042545Z",
+    "guest_nvme_io_timeout_seconds": 30,
+    "outcome": "FIO completed with error 0 after 92.179 s; kernel captured 93 timeout messages, no reset confirmed in available snapshots.",
+    "maximum_io_latency_seconds": 56.710322099,
+    "host_written_bytes": 876544,
+    "nand_writes": 5811388
+  }
+}

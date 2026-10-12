@@ -1,0 +1,6 @@
+/home/zheng/桌面/代码/learnedFTL/reproduction/native_parallel_gc_test.c:11:14: warning: no previous prototype for ‘original_regression_main’ [-Wmissing-prototypes]
+   11 | #define main original_regression_main
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~
+/home/zheng/桌面/代码/learnedFTL/reproduction/native_gc_test.c:183:5: note: in expansion of macro ‘main’
+  183 | int main(void)
+      |     ^~~~

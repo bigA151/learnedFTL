@@ -26,7 +26,16 @@
      sp->threshold = 10;
      sp->sgement_cnt = sp->page_total_cnt/sp->mapping_per_page;
  
-@@ -1441,7 +1440,13 @@
+@@ -1423,6 +1422,8 @@
+     float k, b;
+     uint64_t start_lpn = lpns[0];
+     uint64_t start_ppn = ppns[0];
++    for (int i = 1; i < len; i++)
++        if (ppns[i] < start_ppn) start_ppn = ppns[i];
+     uint64_t off_x[TRAIN_LEN];
+     uint64_t off_y[TRAIN_LEN];
+     uint64_t group_start = seg_no * lm->sp->mapping_per_page;
+@@ -1441,7 +1442,13 @@
      }
  
  
@@ -41,16 +50,43 @@
      
      sg->is_accurate = flag;
  
-@@ -1466,7 +1471,7 @@
+@@ -1466,7 +1473,7 @@
      sg->k = k;                          // * k是斜率
      sg->len = lpns[len-1] - lpns[0];    // * len是这一段能索引的最大长度
      sg->slpa = lpns[0]-group_start;     // * slpa是这一段距离group起点的距离
 -    sg->inter = b + start_ppn;          // * b需要加上起始的PPN
-+    sg->inter = b + start_ppn - k * sg->slpa;          // * b需要加上起始的PPN
++    sg->inter = (double)b + start_ppn - (double)k * sg->slpa;          // * b需要加上起始的PPN
  }
  
  static uint64_t get_upper_lpn_bound(simple_segment* sg) {
-@@ -1509,7 +1514,6 @@
+@@ -1486,6 +1493,17 @@
+     sg->seg_cnt = 0;
+     sg->segment_head = NULL;
+     sg->segment_no = no;
++}
++
++static uint64_t bounded_segment_prediction(simple_segment *sg,
++                                            uint64_t off_lpn,
++                                            learned_mgmt *lm)
++{
++    double predicted = (double)sg->k * off_lpn + sg->inter;
++    if (!isfinite(predicted) || predicted < 0 ||
++        predicted >= lm->sp->page_total_cnt)
++        return INVALID_VAL;
++    return (uint64_t)predicted;
+ }
+ 
+ static int segment_search_simple_segment(simple_segment* sg, uint64_t lpn, uint64_t* ppn, learned_mgmt* lm, simple_segment* lru_en) {
+@@ -1498,7 +1516,7 @@
+     uint64_t off_lpn = lpn - group_start;
+     // conflict_resolution_buffer* crb = lm->crb;
+     if (sg->is_accurate == 1) {
+-        *ppn = off_lpn*sg->k + sg->inter;
++        *ppn = bounded_segment_prediction(sg, off_lpn, lm);
+         lru_en->inter = sg->inter;
+         lru_en->is_accurate = sg->is_accurate;
+         lru_en->k = sg->k;
+@@ -1509,7 +1527,6 @@
      } else {
          cr_bm* tmp = lm->crb->crb_unit[seg_no];
          int i;
@@ -58,16 +94,18 @@
          while (tmp) {
              for (i = 0; i < tmp->cnt; i++) {
                  if (tmp->record[i] == lpn) {
-@@ -1527,7 +1531,7 @@
+@@ -1526,8 +1543,8 @@
+         
          if (flag) {
              simple_segment* crb_sm = tmp->to_sm;
-             *ppn = crb_sm->k * off_lpn + crb_sm->inter;
+-            *ppn = crb_sm->k * off_lpn + crb_sm->inter;
 -            lru_en = crb_sm;
++            *ppn = bounded_segment_prediction(crb_sm, off_lpn, lm);
 +            *lru_en = *crb_sm;
          }
      }
  
-@@ -1543,43 +1547,15 @@
+@@ -1543,43 +1560,15 @@
          sg->segment_head = new_seg;
          new_seg->next = NULL;
      } else {
@@ -120,7 +158,7 @@
      }
  
      return NULL;
-@@ -1608,7 +1584,7 @@
+@@ -1608,7 +1597,7 @@
      
      while (sm) {
          if (sm->is_accurate) {
@@ -129,7 +167,7 @@
                  valid_lpns[i] = 1;
              }
          } else {
-@@ -1622,7 +1598,7 @@
+@@ -1622,7 +1611,7 @@
  
                  for (int i = 0; i < tmp->cnt; i++) {
                      if (tmp->record[i] - slpa < 256)
@@ -138,7 +176,7 @@
                  }
              }
          }
-@@ -1933,20 +1909,41 @@
+@@ -1933,20 +1922,41 @@
  
  }
  
@@ -182,7 +220,7 @@
      memset(gtd_to_update, 0, sizeof(gtd_to_update));
  
  
-@@ -1972,15 +1969,15 @@
+@@ -1972,15 +1982,15 @@
          vppn[i] = ppa2vppn(ssd, &wppa[i]);
  
          // * 记录需要更新的translation page
@@ -201,7 +239,7 @@
              ppa = get_gtd_ent(ssd, tvpn);
              /* if no correspond translation page, write new page, else, 
              read old translation page and then write new page */
-@@ -2009,7 +2006,7 @@
+@@ -2009,7 +2019,7 @@
          
          struct nand_cmd gcr;
          gcr.type = GC_IO;
@@ -210,7 +248,7 @@
          gcr.stime = 0;
          ssd_advance_status(ssd, &wppa[i], &gcr);
          
-@@ -2017,38 +2014,7 @@
+@@ -2017,38 +2027,7 @@
      }
  
  
@@ -250,7 +288,7 @@
  
  }
  
-@@ -2066,12 +2032,11 @@
+@@ -2066,12 +2045,11 @@
      struct ppa ppa;
      uint64_t sublat = 0, maxlat = 0;
  
@@ -264,7 +302,7 @@
      memset(gtd_to_update, 0, sizeof(gtd_to_update));
  
  
-@@ -2097,15 +2062,15 @@
+@@ -2097,15 +2075,15 @@
          vppn[i] = ppa2vppn(ssd, &wppa[i]);
  
          // * 记录需要更新的translation page
@@ -283,7 +321,7 @@
              ppa = get_gtd_ent(ssd, tvpn);
              /* if no correspond translation page, write new page, else, 
              read old translation page and then write new page */
-@@ -2134,7 +2099,7 @@
+@@ -2134,7 +2112,7 @@
          if (req == NULL) {
              struct nand_cmd gcr;
              gcr.type = GC_IO;
@@ -292,7 +330,7 @@
              gcr.stime = 0;
              ssd_advance_status(ssd, &wppa[i], &gcr);
          } else {
-@@ -2149,35 +2114,7 @@
+@@ -2149,35 +2127,7 @@
      }
  
  
@@ -329,7 +367,76 @@
  
      return maxlat;
  }
-@@ -2432,12 +2369,14 @@
+@@ -2289,13 +2239,17 @@
+     /* normal IO read path */
+     for (lpn = start_lpn; lpn <= end_lpn; lpn++) {
+         ssd->stat.access_cnt++;
++        sublat = 0;
++        vppn = INVALID_VAL;
++        memset(&lru_en, 0, sizeof(lru_en));
++        lru_en.len = -1;
+         bool find_in_flag = false;
+         old_lun = NULL;
+         if (!ssd->start_write) {
+             continue;
+         }
+ 
+-        for (int i = 0; i < 1; i++) {
++        for (int i = 0; i < ssd->buffer_pointer; i++) {
+             if (ssd->buffer_lpns[i] == lpn) {
+                 sublat = 0;
+                 find_in_flag = true;
+@@ -2304,7 +2258,6 @@
+         }
+ 
+         if (find_in_flag) {
+-            ssd->stat.single_read++;
+             maxlat = (sublat > maxlat) ? sublat : maxlat;
+             continue;
+         }
+@@ -2319,12 +2272,7 @@
+             segment_search_simple_segment(&cmt_ent->sm, lpn, &vppn, ssd->lem, &lru_en);
+ 
+             if (!is_same_segment(&lru_en, &cmt_ent->sm)) {
+-                cmt_ent->sm.inter = lru_en.inter;
+-                cmt_ent->sm.k = lru_en.k;
+-                cmt_ent->sm.inter = lru_en.inter;
+-                cmt_ent->sm.is_accurate = lru_en.is_accurate;
+-                cmt_ent->sm.slpa = lru_en.slpa;
+-                cmt_ent->sm.next = lru_en.next;
++                cmt_ent->sm = lru_en;
+ 
+                 // * cache miss 
+ 
+@@ -2338,6 +2286,7 @@
+                 }
+                 //translation page read latency
+                 translation_page_read(ssd, req, &ppa);
++                read_cnt++;
+                 old_lun = get_lun(ssd, &ppa);
+             }
+         } else {
+@@ -2345,6 +2294,19 @@
+             old_lun = process_translation_page_read(ssd, req, lpn, &vppn);
+         }
+ 
++        if (vppn == INVALID_VAL || vppn >= spp->tt_pgs) {
++            struct ppa actual = get_maptbl_ent(ssd, lpn);
++            struct ppa tp = get_gtd_ent(ssd, tvpn);
++            if (mapped_ppa(&actual) && valid_ppa(ssd, &actual) &&
++                mapped_ppa(&tp) && valid_ppa(ssd, &tp)) {
++                if (read_cnt == 0) {
++                    translation_page_read(ssd, req, &tp);
++                    read_cnt++;
++                    old_lun = get_lun(ssd, &tp);
++                }
++                vppn = ppa2vppn(ssd, &actual);
++            }
++        }
+         if (vppn == INVALID_VAL) {
+             ssd->stat.access_cnt--;
+             maxlat = (sublat > maxlat) ? sublat : maxlat;
+@@ -2432,12 +2394,14 @@
  
      for (lpn = start_lpn; lpn <= end_lpn; lpn++) {
          st->write_cnt++;
@@ -344,7 +451,7 @@
              }
          }
  
-@@ -2447,7 +2386,7 @@
+@@ -2447,7 +2411,7 @@
              // TODO: compact结束之后执行GC
          }
          
@@ -353,3 +460,27 @@
              if (ssd->buffer_lpns[i] == lpn) {
                  update_in_buffer = true;
                  break;
+--- a/bbssd/leaftl.h
++++ b/bbssd/leaftl.h
+@@ -237,7 +237,7 @@
+     int len;
+     uint8_t is_accurate;
+     float k;
+-    uint64_t inter;
++    double inter;
+     struct simple_segment *next;
+     
+ }simple_segment;
+--- a/bbssd/bb.c
++++ b/bbssd/bb.c
+@@ -36,8 +36,8 @@
+              " cmt_miss=%" PRIu64 " model_hit=%" PRIu64
+              " model_use=%" PRIu64 " gc=%" PRIu64
+              " writes=%" PRIu64 " read_energy=%.3Lf write_energy=%.3Lf"
+-             " erase_energy=%.3Lf\n",
+-             st->access_cnt, st->cmt_hit_cnt, st->cmt_miss_cnt, st->model_hit, st->model_hit, (uint64_t)st->gc_cnt, (uint64_t)st->wa_cnt, st->read_joule, st->write_joule, st->erase_joule);
++             " erase_energy=%.3Lf single_read=%d double_read=%d triple_read=%d\n",
++             st->access_cnt, st->cmt_hit_cnt, st->cmt_miss_cnt, st->model_hit, st->model_hit, (uint64_t)st->gc_cnt, (uint64_t)st->wa_cnt, st->read_joule, st->write_joule, st->erase_joule, st->single_read, st->double_read, st->triple_read);
+ }
+ 
+ static void bb_flip(FemuCtrl *n, NvmeCmd *cmd)

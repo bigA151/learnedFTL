@@ -1,0 +1,2 @@
+/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.c:1506:30: runtime error: 1.84467e+19 is outside the range of representable values of type 'long unsigned int'
+native_gc_test: /home/zheng/桌面/代码/learnedFTL/reproduction/native_leaftl_wrap_test.c:25: main: Assertion `fabs(wrap_cache.k + 1023.0) < 0.001' failed.

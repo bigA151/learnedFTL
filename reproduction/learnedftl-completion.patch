@@ -219,7 +219,7 @@
          ssd->gtd_wps[i].curline = NULL;
          /* 调用 g_malloc0：按给定字节数分配零初始化内存；分配的是状态/引用结构而不是 NAND payload。 */
          ssd->gtd_wps[i].wpl = g_malloc0(sizeof(struct wp_lines));
-@@ -703,192 +750,81 @@
+@@ -703,192 +750,89 @@
      
  // }
  
@@ -450,6 +450,14 @@
 +            int writes = targets * ssd->sp.trans_per_line;
 +            int metadata = writes >= ssd->trans_wp.curline->rest;
 +            if (ssd->lm.free_line_cnt < targets + metadata) continue;
++            /* 回收其他组必须净释放 line，caller 随后还要分配自己的目标。
++             * 成对组可能仅有两个源 line；整理到两个目标虽能清无效页，
++             * 却不增加 free line，不能据此继续消耗全局 GC 备用空间。
++             * 若直接重建 caller，则它使用整理后的 current，无需额外目标。 */
++            int sources = candidate->vic_cnt +
++                          (candidate->borrow_peer ? candidate->borrow_peer->vic_cnt : 0);
++            bool rebuilds_caller = candidate == wpp || candidate->borrow_peer == wpp;
++            if (!rebuilds_caller && sources <= targets + metadata) continue;
 +            if (invalid > most_invalid) {
 +                most_invalid = invalid;
 +                selected = candidate;
@@ -477,7 +485,7 @@
  /**
   * 功能：从带哨兵的 WP 所有权单链中删除指定 line 的一个引用节点。
   * 参数 wpl：WP 所有权单链的遍历/插入节点，不是 line 本体；链头是哨兵。
-@@ -912,38 +848,6 @@
+@@ -912,38 +856,6 @@
      
  }
  
@@ -516,7 +524,7 @@
  /**
   * 功能：推进 line 写坐标并在回绕时调度 GC。
   * 原作者：wsz
-@@ -954,7 +858,7 @@
+@@ -954,7 +866,7 @@
   * 功能：把 line 写坐标按 channel→lun→page 推进；写满后封存 line 并调度 GC/分配。
   * 参数 ssd：本设备的 FTL 总状态；映射、缓存、NAND 树、WP、模型与统计均挂在此对象。
   * 参数 wpp：本次分配/回收使用的写指针；DATA group 与 trans_wp 的推进约定不同。
@@ -525,7 +533,7 @@
   */
  static void advance_line_write_pointer (struct ssd *ssd, struct write_pointer *wpp) {
      /* 变量 spp：ssdparams 的局部引用，读取几何/时延/映射尺寸，不复制设备参数。 */
-@@ -1003,8 +907,8 @@
+@@ -1003,8 +915,8 @@
                  // clock_gettime(CLOCK_MONOTONIC, &time1);
                  /* 阶段 4：调度 GC；false 另取 free line，DATA 的 true 再推进到 GC 最后写页之后。 */
                  /* 变量 res：GC 调度返回的 caller 控制标志；true 不证明分配成功，false 也可能回收了其他 WP。 */
@@ -536,7 +544,7 @@
                  // clock_gettime(CLOCK_MONOTONIC, &time2);
                  
                  // ssd->stat.GC_time += ((time2.tv_sec - time1.tv_sec)*1000000000 + (time2.tv_nsec - time1.tv_nsec));
-@@ -1015,7 +919,7 @@
+@@ -1015,7 +927,7 @@
                  if (!res)
                      /* 调用 init_line_write_pointer：为 WP 取得一条 free line，建立初始坐标、页类型和所有权关系。 */
                      init_line_write_pointer(ssd, wpp, false);
@@ -545,7 +553,7 @@
                      if (wpp->curline->rest == 0) {
                          /* 调用 func：诊断辅助函数：打印固定字符串并返回指针所指整数，不修改该整数。 */
                          func(&wpp->curline->rest);
-@@ -1076,6 +980,12 @@
+@@ -1076,6 +988,12 @@
   */
  static struct ppa get_new_line_page(struct ssd *ssd, struct write_pointer *wpp)
  {
@@ -558,7 +566,7 @@
      /* 变量 ppa：本次物理地址；DATA/TP 及输入输出语义由本函数路径确定。 */
      struct ppa ppa;
      ppa.ppa = 0;
-@@ -1085,6 +995,7 @@
+@@ -1085,6 +1003,7 @@
      ppa.g.blk = wpp->blk;
      ppa.g.pl = wpp->pl;
      wpp->curline->rest--;
@@ -566,7 +574,7 @@
      if (wpp->curline->rest < 0) {
          /* 调用 printf：输出原有诊断/计数信息；日志字符串保留，打印本身不会恢复异常状态。 */
          printf("buduijin\n");
-@@ -1102,18 +1013,24 @@
+@@ -1102,18 +1021,24 @@
   * 参数 spp：ssdparams 的局部引用，读取几何/时延/映射尺寸，不复制设备参数。
   * 作用与边界：原来的 2 的幂断言均被注释，当前函数为空；没有实际参数验证。
   */
@@ -597,7 +605,7 @@
   */
  static void ssd_init_params(struct ssdparams *spp)
  {
-@@ -1183,7 +1100,7 @@
+@@ -1183,7 +1108,7 @@
      printf("total pages: %d\n", spp->tt_line_wps);
  
      spp->tt_gtd_size = spp->tt_pgs / spp->ents_per_pg;
@@ -606,7 +614,7 @@
      spp->enable_request_prefetch = true;    /* 原作者要求保持请求预取开启；这里只是注释，源码未强制禁止 false */
      spp->enable_select_prefetch = true;
  
-@@ -1299,7 +1216,7 @@
+@@ -1299,7 +1224,7 @@
  /**
   * 功能：分配完整正向表、GTD、模型数组与预留数组，并设置未映射初值。
   * 参数 ssd：本设备的 FTL 总状态；映射、缓存、NAND 树、WP、模型与统计均挂在此对象。
@@ -615,7 +623,7 @@
   */
  static void ssd_init_maptbl(struct ssd *ssd)
  {
-@@ -1315,9 +1232,8 @@
+@@ -1315,9 +1240,8 @@
      }
  
      // 初始化 GTD 与模型等常驻 DRAM 数组
@@ -626,7 +634,7 @@
      /* 调用 g_malloc0：按给定字节数分配零初始化内存；分配的是状态/引用结构而不是 NAND payload。 */
      ssd->gtd = g_malloc0(sizeof(struct ppa) * spp->tt_trans_pgs);
      /* 调用 g_malloc0：按给定字节数分配零初始化内存；分配的是状态/引用结构而不是 NAND payload。 */
-@@ -1333,14 +1249,12 @@
+@@ -1333,14 +1257,12 @@
  
      // 原注释称初始化 CMT；此处实际继续初始化每 TP 的 GTD/模型标志，CMT 在独立函数初始化
  
@@ -642,7 +650,7 @@
  
          // 原预留最小/最大属性说明；此处没有实际维护逻辑
  
-@@ -1429,19 +1343,15 @@
+@@ -1429,19 +1351,15 @@
  }
  
  /**
@@ -669,7 +677,7 @@
  }
  
  // * 将所有的模型都初始化为y=x
-@@ -1459,16 +1369,14 @@
+@@ -1459,16 +1377,14 @@
      /* 变量 i：当前数组/外层循环下标，范围由紧邻 for 条件确定。 */
      for (int i = 0; i < sp->tt_gtd_size; i++) {
  
@@ -688,7 +696,7 @@
              brk->key = j * avg_valid_cnt;
          }
      }
-@@ -1542,8 +1450,8 @@
+@@ -1542,8 +1458,8 @@
      /* 调用 ssd_init_rmap：分配按普通 PPN 索引的反向标识数组，全部设 INVALID_LPN。 */
      ssd_init_rmap(ssd);
  
@@ -699,7 +707,7 @@
      ssd_init_bitmap(ssd);
  
      /* 初始化全局 line 实体、free 池与 victim 队列 */
-@@ -1567,6 +1475,7 @@
+@@ -1567,6 +1483,7 @@
      ssd_init_all_models(ssd);
  
      ssd->model_used = true;
@@ -707,7 +715,7 @@
  
      /* 调用 qemu_thread_create：建立 FTL 工作线程，将控制器 n 作为 arg 传入 ftl_thread；线程等待数据面启动。 */
      qemu_thread_create(&ssd->ftl_thread, "FEMU-FTL-Thread", ftl_thread, n,
-@@ -1889,8 +1798,16 @@
+@@ -1889,8 +1806,16 @@
      }
      line->ipc++;
      line->vpc--;
@@ -725,7 +733,7 @@
      /* 旧草案：覆盖写后调整 victim 优先队列位置；下面队列更新代码已注释 */
      // if (line->pos) {
      //     旧草案说明：此优先队列调用可能更新 line.vpc；当前不执行
-@@ -2023,7 +1940,7 @@
+@@ -2023,7 +1948,7 @@
   * 功能：为传入 LPN 所属 TP 分配 trans_wp 元数据页，更新 GTD/rmap/VALID 后写后推进。
   * 参数 ssd：本设备的 FTL 总状态；映射、缓存、NAND 树、WP、模型与统计均挂在此对象。
   * 参数 tvpn：实际传入 LPN，不是已整除的 TP 索引。
@@ -734,7 +742,7 @@
   */
  static uint64_t translation_write_page(struct ssd *ssd, uint64_t tvpn)
  {
-@@ -2042,11 +1959,20 @@
+@@ -2042,11 +1967,20 @@
      set_rmap_ent(ssd, index, &new_gtd_ppa);
      /* 调用 mark_page_valid：把已分配 FREE 页提交为 VALID，并使 block/line.vpc 各加 1。 */
      mark_page_valid(ssd, &new_gtd_ppa);
@@ -760,7 +768,7 @@
  
      /* 调用 advance_line_write_pointer：把 line 写坐标按 channel→lun→page 推进；写满后封存 line 并调度 GC/分配。 */
      advance_line_write_pointer(ssd, &ssd->trans_wp);
-@@ -2079,9 +2005,9 @@
+@@ -2079,9 +2013,9 @@
  /**
   * 功能：构造 USER_IO NAND_READ，模拟一次翻译页读取并返回 ns 延迟。
   * 参数 ssd：本设备的 FTL 总状态；映射、缓存、NAND 树、WP、模型与统计均挂在此对象。
@@ -772,7 +780,7 @@
   */
  static uint64_t translation_read_page(struct ssd *ssd, NvmeRequest *req, struct ppa *ppa)
  {
-@@ -2091,7 +2017,7 @@
+@@ -2091,7 +2025,7 @@
      struct nand_cmd trd;
      trd.type = USER_IO;
      trd.cmd = NAND_READ;
@@ -781,7 +789,7 @@
      /* 调用 ssd_advance_status：模拟一个 NAND 读/写/擦命令的 LUN 排队，更新完成时间、写计数与估算能耗。 */
      lat = ssd_advance_status(ssd, ppa, &trd);
      
-@@ -2148,7 +2074,7 @@
+@@ -2148,7 +2082,7 @@
   * 参数 pos：entry 在 TPnode 热度队列的插入位置，HEAD 为头、TAIL 为尾。
   * 参数 prefetch：缓存项是否作为预取加载；读 hit 时据此建立翻译完成依赖。
   * 参数 next_avail_time：翻译页 READ 完成的 ns 时间，预取 entry 用它等待地址就绪。
@@ -790,7 +798,7 @@
   */
  static void insert_entry_to_cmt(struct ssd *ssd, uint64_t lpn, uint64_t ppn, int pos, bool prefetch, uint64_t next_avail_time)
  {
-@@ -2171,12 +2097,15 @@
+@@ -2171,12 +2105,15 @@
      if (cmt_entry == NULL) {
          /* 调用 ftl_err：通过错误日志宏输出到 stderr；宏本身不终止函数或修复状态。 */
          ftl_err("no cmt_entry in free cmt entry list");
@@ -807,7 +815,7 @@
      cmt_entry->dirty = CLEAN;
      cmt_entry->prefetch = prefetch;
      cmt_entry->next_avail_time = next_avail_time;
-@@ -2196,10 +2125,10 @@
+@@ -2196,10 +2133,10 @@
      //     }
      // }
      /* 依赖 caller 已把对应 TPnode 调到全局热度队列头 */
@@ -821,7 +829,7 @@
          //创建 TPnode 并插到全局 TP 热度队列头
          /* 阶段 2.1：没有对应队头时新建 TPnode，同时建立其队列和 TP 哈希。 */
          /* 调用 g_malloc0：按给定字节数分配零初始化内存；分配的是状态/引用结构而不是 NAND payload。 */
-@@ -2275,7 +2204,7 @@
+@@ -2275,7 +2212,7 @@
  /**
   * 功能：从最冷 TP 优先淘汰冷 CLEAN，缺 CLEAN 才淘汰 DIRTY；脏项聚合更新 TP。
   * 参数 ssd：本设备的 FTL 总状态；映射、缓存、NAND 树、WP、模型与统计均挂在此对象。
@@ -830,7 +838,7 @@
   */
  static int evict_entry_from_cmt(struct ssd *ssd)
  {
-@@ -2392,381 +2321,68 @@
+@@ -2392,381 +2329,68 @@
      return tpnode_evict_flag;
  }
  
@@ -1266,7 +1274,7 @@
  /**
   * 功能：在 enable_gc_delay 开启时模拟一次 GC NAND_READ。
   * 参数 ssd：本设备的 FTL 总状态；映射、缓存、NAND 树、WP、模型与统计均挂在此对象。
-@@ -2831,70 +2447,37 @@
+@@ -2831,70 +2455,37 @@
  // }
  
  
@@ -1281,7 +1289,8 @@
 -static uint64_t gc_write_page_through_line_wp(struct ssd *ssd, uint64_t lpn, struct ppa *new_ppa, struct write_pointer* wpp)
 +/* GC 数据写：同步真值、反向表、CMT 和 bitmap，随后模拟 NAND 编程。 */
 +static uint64_t gc_write_page_through_line_wp(struct ssd *ssd, uint64_t lpn,
-+                                            struct ppa *new_ppa, struct write_pointer *wpp)
++                                            struct ppa *new_ppa, struct write_pointer *wpp,
++                                            uint64_t source_ready)
  {
 -    // struct ppa new_ppa;
 -    /* 变量 new_lun：新页所在 LUN 的状态引用，用完成时间刷新 gc_endtime。 */
@@ -1303,7 +1312,6 @@
 -    /* 调用 get_new_line_page：把 WP 当前坐标打包成 PPA，并消耗 curline 的一个剩余页槽。 */
 +    }
 +    struct ppa old = get_maptbl_ent(ssd, lpn);
-+    uint64_t source_ready = mapped_ppa(&old) ? get_lun(ssd, &old)->next_lun_avail_time : 0;
      *new_ppa = get_new_line_page(ssd, wpp);
 -    /* 更新完整 LPN→PPA 真值表 */
 -    /* 调用 set_maptbl_ent：把指定 PPA 按值写入完整 LPN 映射表。 */
@@ -1360,7 +1368,7 @@
      return 0;
  }
  
-@@ -2948,832 +2531,483 @@
+@@ -2948,832 +2539,494 @@
      ssd->line2write_pointer[line->id] = NULL;
  }
  
@@ -1937,7 +1945,8 @@
 -    /* 阶段 1：按函数调用统计训练；建立每 TP 的样本数组，n 小也会搬移。 */
 +/* 论文 III-E2：排序、搬移、贪心分段回归、逐页评估。固定最多八段，不漏余数/末项。 */
 +static void model_training(struct ssd *ssd, struct write_pointer *wpp,
-+                           uint64_t *group_lpns, int *counts, int start_gtd)
++                           uint64_t *group_lpns, int *counts, int start_gtd,
++                           const uint64_t *read_ready)
 +{
 +    struct ssdparams *spp = &ssd->sp;
 +    uint64_t *x = g_new(uint64_t, spp->ents_per_pg);
@@ -2027,7 +2036,8 @@
 +        uint64_t base = UINT64_MAX;
 +        for (int i = 0; i < n; i++) {
 +            struct ppa moved;
-+            gc_write_page_through_line_wp(ssd, lpns[i], &moved, wpp);
++            gc_write_page_through_line_wp(ssd, lpns[i], &moved, wpp,
++                read_ready[lpns[i] - (uint64_t)start_gtd * spp->ents_per_pg]);
 +            x[i] = lpns[i] - lpns[0];
 +            y[i] = ppa2vppn(ssd, &moved);
 +            if (y[i] < base) {
@@ -2256,11 +2266,13 @@
 +    int capacity = wpp->vic_cnt + (groups[1] ? groups[1]->vic_cnt : 0);
 +    struct line **sources = g_new(struct line *, capacity);
 +    uint64_t *lpns[2] = { NULL, NULL };
++    uint64_t *read_ready[2] = { NULL, NULL };
 +    int *counts[2] = { NULL, NULL };
 +    int result = -1;
 +    int tp_writes = 0;
 +    for (int g = 0; g < group_count; g++) {
 +        lpns[g] = g_new(uint64_t, p->trans_per_line * p->ents_per_pg);
++        read_ready[g] = g_new0(uint64_t, p->trans_per_line * p->ents_per_pg);
 +        counts[g] = g_new0(int, p->trans_per_line);
 +        for (struct wp_lines *link = groups[g]->wpl->next; link; link = link->next) {
 +            sources[source_count++] = link->line;
@@ -2310,8 +2322,12 @@
 +            struct ppa tp = ssd->gtd[start + slot];
 +            if (mapped_ppa(&tp)) gc_read_page(ssd, &tp);
 +            for (int j = 0; j < counts[g][slot]; j++) {
-+                struct ppa data = get_maptbl_ent(ssd, lpns[g][slot * p->ents_per_pg + j]);
++                uint64_t lpn = lpns[g][slot * p->ents_per_pg + j];
++                struct ppa data = get_maptbl_ent(ssd, lpn);
 +                gc_read_page(ssd, &data);
++                /* 固定本页 READ 的完成时间；后续目标写不得改变这项依赖。 */
++                read_ready[g][lpn - (uint64_t)start * p->ents_per_pg] =
++                    get_lun(ssd, &data)->next_lun_avail_time;
 +            }
 +        }
 +        seal_current_line(ssd, groups[g]);
@@ -2319,7 +2335,8 @@
 +    ssd->gc_in_progress = true;
 +    for (int g = 0; g < group_count; g++) init_line_write_pointer(ssd, groups[g], false);
 +    for (int g = 0; g < group_count; g++) {
-+        model_training(ssd, groups[g], lpns[g], counts[g], groups[g]->id * p->trans_per_line);
++        model_training(ssd, groups[g], lpns[g], counts[g],
++                       groups[g]->id * p->trans_per_line, read_ready[g]);
 +        groups[g]->trained = true;
 +    }
 +    for (int i = 0; i < source_count; i++) {
@@ -2447,7 +2464,9 @@
 +    ssd->gc_in_progress = false;
 +    result = 0;
 + done:
-+    for (int g = 0; g < group_count; g++) { g_free(counts[g]); g_free(lpns[g]); }
++    for (int g = 0; g < group_count; g++) {
++        g_free(counts[g]); g_free(lpns[g]); g_free(read_ready[g]);
++    }
 +    g_free(sources);
 +    return result;
 +}
@@ -2608,7 +2627,7 @@
      return false;
  }
  
-@@ -3799,7 +3033,7 @@
+@@ -3799,7 +3052,7 @@
   * 功能：逐逻辑页先查 CMT，miss 后按 bitmap 尝试模型，失败再读 TP，最终模拟数据 READ。
   * 参数 ssd：本设备的 FTL 总状态；映射、缓存、NAND 树、WP、模型与统计均挂在此对象。
   * 参数 req：外围 NVMe 请求；nlb 已转换为实际 sector 数，不是原始零基 NLB。
@@ -2617,7 +2636,7 @@
   */
  static uint64_t ssd_read(struct ssd *ssd, NvmeRequest *req)
  {
-@@ -3807,7 +3041,12 @@
+@@ -3807,7 +3060,12 @@
      struct ssdparams *spp = &ssd->sp;
      /* 变量 lba：请求起始逻辑 sector，来自 req.slba。 */
      uint64_t lba = req->slba;
@@ -2631,7 +2650,7 @@
      /* 变量 nsecs：请求实际 sector 数，来自已解码 req.nlb。 */
      int nsecs = req->nlb;
      /* 变量 ppa：本次物理地址；DATA/TP 及输入输出语义由本函数路径确定。 */
-@@ -3851,7 +3090,7 @@
+@@ -3851,7 +3109,7 @@
          if (cmt_entry) {
              ssd->stat.cmt_hit_cnt++;
              /* 调用 get_maptbl_ent：读取完整正向真值表中的 LPN→PPA。 */
@@ -2640,7 +2659,7 @@
              /* 调用 mapped_ppa：检查 packed PPA 是否不同于 UNMAPPED_PPA 哨兵。 */
              /* 调用 valid_ppa：检查 PPA 的六个几何字段是否位于设备范围内。 */
              if (!mapped_ppa(&ppa) || !valid_ppa(ssd, &ppa)) {
-@@ -3876,20 +3115,19 @@
+@@ -3876,20 +3134,19 @@
              goto ssd_read_latency;
          } 
  
@@ -2667,7 +2686,7 @@
                          goto ssd_read_latency;
                      }
                  }
-@@ -3906,7 +3144,7 @@
+@@ -3906,7 +3163,7 @@
          /* 调用 cmt_hit_no_move：查询 LPN 缓存项并返回 entry 或 NULL，保持两层热度位置不动。 */
          cmt_entry = cmt_hit_no_move(ssd, lpn);
          /* 调用 get_maptbl_ent：读取完整正向真值表中的 LPN→PPA。 */
@@ -2676,7 +2695,7 @@
          /* 调用 mapped_ppa：检查 packed PPA 是否不同于 UNMAPPED_PPA 哨兵。 */
          /* 调用 valid_ppa：检查 PPA 的六个几何字段是否位于设备范围内。 */
          if (!mapped_ppa(&ppa) || !valid_ppa(ssd, &ppa)) {
-@@ -3954,11 +3192,121 @@
+@@ -3954,11 +3211,121 @@
      return maxlat;
  }
  
@@ -2799,7 +2818,7 @@
   */
  static uint64_t ssd_write(struct ssd *ssd, NvmeRequest *req)
  {
-@@ -3966,6 +3314,11 @@
+@@ -3966,6 +3333,11 @@
      /* 阶段 1：按 sector 计算 LPN 闭区间，并准备请求最大写延迟。 */
      /* 变量 lba：请求起始逻辑 sector，来自 req.slba。 */
      uint64_t lba = req->slba;
@@ -2811,7 +2830,7 @@
      /* 变量 spp：ssdparams 的局部引用，读取几何/时延/映射尺寸，不复制设备参数。 */
      struct ssdparams *spp = &ssd->sp;
      /* 变量 len：写请求实际 sector 数，不是 byte 长度。 */
-@@ -3989,8 +3342,6 @@
+@@ -3989,8 +3361,6 @@
       * maxlat：本请求所有页完成延迟的最大值，非逐页相加。
       */
      uint64_t curlat = 0, maxlat = 0;
@@ -2820,7 +2839,7 @@
  
      if (end_lpn >= spp->tt_pgs) {
          /* 调用 ftl_err：通过错误日志宏输出到 stderr；宏本身不终止函数或修复状态。 */
-@@ -4001,20 +3352,15 @@
+@@ -4001,20 +3371,15 @@
          curlat = 0;
          // clock_gettime(CLOCK_MONOTONIC, &time1);
          // 先通过 TP/group 索引定位数据 WP
@@ -2843,7 +2862,7 @@
          /* 调用 cmt_hit：查询 LPN 与所属 TP，并把命中的 TPnode/entry 移到各自热度队列头。 */
          cmt_entry = cmt_hit(ssd, lpn);
          /* 阶段 3：准备当前 CMT 项，缺失时加载旧 TP 或建立未映射槽。 */
-@@ -4039,27 +3385,23 @@
+@@ -4039,27 +3404,23 @@
  
          /* 阶段 4：旧 DATA 页失效并清旧 rmap，覆盖写不返还 rest。 */
          /* 调用 mapped_ppa：检查 packed PPA 是否不同于 UNMAPPED_PPA 哨兵。 */
@@ -2879,7 +2898,7 @@
          /* 调用 set_maptbl_ent：把指定 PPA 按值写入完整 LPN 映射表。 */
          set_maptbl_ent(ssd, lpn, &ppa);
          /* 调用 ppa2pgidx：把物理地址展平为常规 PPN，供 rmap 和 CMT 使用。 */
-@@ -4075,73 +3417,42 @@
+@@ -4075,73 +3436,42 @@
          struct nand_cmd swr;
          swr.type = USER_IO;
          swr.cmd = NAND_WRITE;
@@ -2979,7 +2998,7 @@
      }
  
      // ssd->stat.write_time += (maxlat + (time2.tv_sec - time1.tv_sec)*1000000000 + (time2.tv_nsec - time1.tv_nsec));
-@@ -4152,7 +3463,7 @@
+@@ -4152,7 +3482,7 @@
  /**
   * 功能：等待数据面启动，逐 poller 取请求，执行 FTL 读写并回送带延迟的完成请求。
   * 参数 arg：线程参数，实际为 FemuCtrl*。
@@ -2988,7 +3007,7 @@
   */
  static void *ftl_thread(void *arg)
  {
-@@ -4163,7 +3474,7 @@
+@@ -4163,7 +3493,7 @@
      struct ssd *ssd = n->ssd;
      /* 变量 req：外围 NVMe 请求；nlb 已转换为实际 sector 数，不是原始零基 NLB。 */
      NvmeRequest *req = NULL;
@@ -2997,7 +3016,7 @@
      uint64_t lat = 0;
      /* 变量 rc：请求 ring 出队/入队的成功数量，期望为 1。 */
      int rc;
-@@ -4200,15 +3511,17 @@
+@@ -4200,15 +3530,17 @@
              if (rc != 1) {
                  /* 调用 printf：输出原有诊断/计数信息；日志字符串保留，打印本身不会恢复异常状态。 */
                  printf("FEMU: FTL to_ftl dequeue failed\n");
@@ -3016,7 +3035,7 @@
                  /* 调用 ssd_write：按 LPN→TP→group 选择 WP，准备 CMT、失效旧页、分配新页并提交映射/写时序。 */
                  lat = ssd_write(ssd, req);
                  break;
-@@ -4232,7 +3545,10 @@
+@@ -4232,7 +3564,10 @@
              rc = femu_ring_enqueue(ssd->to_poller[i], (void *)&req, 1);
              if (rc != 1) {
                  /* 调用 ftl_err：通过错误日志宏输出到 stderr；宏本身不终止函数或修复状态。 */

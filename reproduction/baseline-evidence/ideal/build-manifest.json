@@ -1,0 +1,13 @@
+{
+  "variant": "ideal",
+  "binary": "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/ideal/qemu-ideal",
+  "base_build": "/home/zheng/FEMU-ext4/reproduction/upstream/build-femu",
+  "sha256": "a6b717d37f247baba6076bd82f9479a032951b19e62a3fd3c103155b1a8096ef",
+  "sources": {
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/ideal/femu/bbssd/ftl.c": "f21aae3a7f1d2b8ccb768680568428743f4e0a49ee3a34f8c2481b64b323d97a",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/ideal/femu/bbssd/ftl.h": "09cd29c7a470c279cff57fcaa492af3f13d883e7cfe2cd1dbb9b7179d8e20a24",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/ideal/femu/bbssd/bb.c": "8121257e0725e7b002bfd2372cef3d82db461f25d4ccef89a3668adeb6bf50a4",
+    "/home/zheng/FEMU-ext4/reproduction/build_paper.py": "d64a53bbd68a73a7966f9b7aa679203797650430625414825a59d2d7a4015b10"
+  },
+  "notes": "Existing parameter/minimal diagnostic corrections; baseline mechanisms require separate validation."
+}

@@ -1,0 +1,1 @@
+FTL NAND timeline with 64 outstanding virtual requests; not a throughput measurement or NVMe lifecycle test. Full geometry exceeds 30s after 148 submissions; consistency/sanitizer success does not mean acceptable latency.

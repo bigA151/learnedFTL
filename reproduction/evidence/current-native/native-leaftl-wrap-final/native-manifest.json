@@ -1,0 +1,24 @@
+{
+  "status": "passed",
+  "sanitizers": true,
+  "seed": 20261012,
+  "sanitizer_set": [
+    "address",
+    "undefined",
+    "float-cast-overflow"
+  ],
+  "geometry": "See harness: 4ch/4lun/64pg/4KiB, block count and CMT set by harness macros",
+  "binary_sha256": "c8a46b1222d6b28167d1c834414c39ac2a55fcc12034a37f549bf75ed0f99669",
+  "sources": {
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/native_leaftl_wrap_test.c": "2ac33a93d7de272e0066c54861a09705bdf379ab8d4479d4df1e5694934e3462",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/native_gc_test.c": "af95d9c877c225438feeb7df7057275434f15dcaa52706865da675404a7e70c0",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.c": "609e0a9f90fe5a8ad59843ceef6ec524b62b9e1f6bf38551994f99cb1f0d5db9",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.h": "44cdd5ee812f8f18f3421d20676780142f22f94b2bb5ec3cafd4c6992fe95d44",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/util.c": "067b43c76264d50b6ebc932a16cb9819297befbf5763f8bf3f64279938e58d07",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/lib/pqueue.c": "705ac2ec9ce03df90b1e660d5a449acf19f74736c19be9b061aeed2b22526102",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/run_native_gc.py": "3b404b27a7aac2b0b41777a7f9f10e8973b602bfcc9831bf3f118677475e05ed"
+  },
+  "manifest_corrections": [
+    "Native LeaFTL random-overwrite seed is 20261012 in the harness; previous generic runner metadata said 20261011. Earlier tests without random overwrites do not use this seed."
+  ]
+}

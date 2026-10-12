@@ -1,0 +1,20 @@
+{
+  "binary": "/home/zheng/桌面/代码/learnedFTL/reproduction/qemu-learnedftl-711fb4182628ddec",
+  "base_build": "/home/zheng/FEMU-ext4/reproduction/upstream/build-femu",
+  "sources": {
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/util.c": "067b43c76264d50b6ebc932a16cb9819297befbf5763f8bf3f64279938e58d07",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/tpftl.h": "7560350bf9819d8fb8f8c0b0aea57e8a660712ad026d32cdf356e8c8303687cc",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/ld-tpftl.h": "a6f0c1fa31f96bbb219869bfdcc225330707ecb63c5541eb5c321ddf82475e44",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/ld-tpftl.c": "77957498e621f5d7ef0c53b1b6252f77924aa71f6d5c3b009ada72a6f5461d7f",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/bb.c": "bd08388abb29e09751cb468546dbb8d71329516a1962c639f77a3be767832e93",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/tpftl.c": "ebc8917ebc0330128a23161f8d349478893f1af14be139d7712d0cdcd9fdac65",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/dftl.c": "d001af0b8ee014f9eb060b9908532d07534f0d45b7b599f3a3ce7fa5312ef51a",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/ftl.h": "f7980d6db1875d11d7f662fe287877f414c48c9aec6129d063a25ab5cd37de43",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/ftl.c": "0427d905e9769b93fefe140828d429a88f25e7af98ac09b4e29a7355f00a1855",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/util.h": "f62a26a37e1897732e4df33d274d84c6db5493729c07a93f659507ee62f12781",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/dftl.h": "45d33e684767a30bd80fc83ff0e988760042ee3ae0d5e4dcc34f373eeac29725",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/leaftl.c": "28348d1602c6627df8fcbc4b474ce55a337a3d9da926307da80bcfae3ffeaddc",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/leaftl.h": "07d78b5a6508aefa17b2a56a1ada9e1fdba16e2a22377717c981a2fbeecc7eb5"
+  },
+  "sha256": "711fb4182628ddec0813a70a89f7675f7999c9227793ac9dade0603d037dd097"
+}

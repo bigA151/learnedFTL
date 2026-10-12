@@ -1,0 +1,26 @@
+/home/zheng/桌面/代码/learnedFTL/reproduction/native_leaftl_test.c: In function ‘main’:
+/home/zheng/桌面/代码/learnedFTL/reproduction/native_leaftl_test.c:36:18: warning: assignment discards ‘const’ qualifier from pointer target type [-Wdiscarded-qualifiers]
+   36 |     dev->ssdname = "native-leaftl";
+      |                  ^
+In file included from /usr/include/string.h:580,
+                 from /home/zheng/FEMU-ext4/reproduction/upstream/include/qemu/osdep.h:87,
+                 from /home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/../nvme.h:4,
+                 from /home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.h:4,
+                 from /home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.c:19,
+                 from /home/zheng/桌面/代码/learnedFTL/reproduction/native_leaftl_test.c:1:
+In function ‘memset’,
+    inlined from ‘GC_flush’ at /home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.c:1947:5,
+    inlined from ‘do_gc.constprop’ at /home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.c:1379:17:
+/usr/include/x86_64-linux-gnu/bits/string_fortified.h:59:10: warning: ‘__builtin_memset’ specified size between 18446744071562067968 and 18446744073709551615 exceeds maximum object size 9223372036854775807 [-Wstringop-overflow=]
+   59 |   return __builtin___memset_chk (__dest, __ch, __len,
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   60 |                                  __glibc_objsize0 (__dest));
+      |                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~
+In function ‘memset’,
+    inlined from ‘buffer_flush’ at /home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.c:2040:5,
+    inlined from ‘ssd_write’ at /home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.c:2399:26:
+/usr/include/x86_64-linux-gnu/bits/string_fortified.h:59:10: warning: ‘__builtin_memset’ specified size between 18446744071562067968 and 18446744073709551615 exceeds maximum object size 9223372036854775807 [-Wstringop-overflow=]
+   59 |   return __builtin___memset_chk (__dest, __ch, __len,
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   60 |                                  __glibc_objsize0 (__dest));
+      |                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~

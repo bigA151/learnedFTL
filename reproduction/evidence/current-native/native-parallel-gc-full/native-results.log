@@ -1,0 +1,13 @@
+total pages: 256
+geometry=8ch/8lun/512pg/256blocks logical=7812608 region=121856
+prewarm=1 free=16 gc=0
+prewarm=2 free=3 gc=450
+prewarm=3 free=3 gc=928
+prewarm=4 free=3 gc=1404
+prewarm=5 free=3 gc=1880
+prewarm=6 free=3 gc=2358
+submitted=1 max_latency_ms=3302.360 free=3 gc=2 nand_writes=32833 WAF=32833.000
+submitted=65 max_latency_ms=28812.120 free=3 gc=129 nand_writes=2115163 WAF=32540.969
+submitted=129 max_latency_ms=28812.120 free=3 gc=181 nand_writes=3789609 WAF=29376.814
+submitted=148 max_latency_ms=32247.840 free=3 gc=219 nand_writes=4413436 WAF=29820.514
+DIAGNOSTIC: queued FTL latency exceeds 30 seconds

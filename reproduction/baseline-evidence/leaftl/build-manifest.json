@@ -1,0 +1,16 @@
+{
+  "variant": "leaftl",
+  "binary": "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/leaftl/qemu-leaftl-4e0bc30d7c50fb97",
+  "base_build": "/home/zheng/FEMU-ext4/reproduction/upstream/build-femu",
+  "sha256": "4e0bc30d7c50fb974aa9fbe77a103aa5eb67ae7fd4a415ae9cc0d0a783cc4c25",
+  "sources": {
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/leaftl/femu/bbssd/leaftl.c": "2cefdfbd492ae8701202300f86e1a529a57bcc1c69350e708ecebf782bf08058",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/leaftl/femu/bbssd/leaftl.h": "44cdd5ee812f8f18f3421d20676780142f22f94b2bb5ec3cafd4c6992fe95d44",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/leaftl/femu/bbssd/bb.c": "3d83d18c8bb0e0827060ca30ac989c389032cee232498cbcbf5c1a637fd9f63b",
+    "/home/zheng/FEMU-ext4/reproduction/build_paper.py": "d64a53bbd68a73a7966f9b7aa679203797650430625414825a59d2d7a4015b10",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/build_baselines.py": "0a496d69e0fdddee14d81bc2dbde3c2eea7a8c47c3c9940e0e7f3966caa7fe39",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants/leaftl/mechanism-repairs.patch": "a6edf8c72d71761aee02be3635723306d3beccd396a122830bae75efc9db2591",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/repair_leaftl.py": "22df5e88bcc0c56bd4024b9af02aead9a6a465b5684724f06aa400f6a2cd7f9a"
+  },
+  "notes": "Existing parameter/minimal diagnostic corrections; baseline mechanisms require separate validation."
+}

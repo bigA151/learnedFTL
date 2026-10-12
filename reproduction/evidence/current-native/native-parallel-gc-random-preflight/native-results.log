@@ -1,0 +1,70 @@
+total pages: 256
+workload=randwrite seed=20261011; each 512KiB chunk once per prewarm pass, unique 4KiB pages per job
+geometry=8ch/8lun/512pg/256blocks logical=7812608 region=121856
+prewarm=1 free=16 gc=0
+targeted_random_overwrites=1024 free=3 gc=1896
+submitted=1 max_latency_ms=139.960 free=3 gc=2 nand_writes=32833 WAF=32833.000
+submitted=65 max_latency_ms=9553.440 free=3 gc=129 nand_writes=2149403 WAF=33067.738
+submitted=129 max_latency_ms=9553.440 free=3 gc=199 nand_writes=4152167 WAF=32187.341
+submitted=193 max_latency_ms=9553.440 free=3 gc=262 nand_writes=6089264 WAF=31550.591
+submitted=257 max_latency_ms=9553.440 free=3 gc=376 nand_writes=7960752 WAF=30975.689
+submitted=321 max_latency_ms=9553.440 free=3 gc=501 nand_writes=10029231 WAF=31243.710
+submitted=385 max_latency_ms=9553.440 free=3 gc=567 nand_writes=12047250 WAF=31291.558
+submitted=449 max_latency_ms=9553.440 free=3 gc=685 nand_writes=13984402 WAF=31145.661
+submitted=513 max_latency_ms=9553.440 free=3 gc=810 nand_writes=16052881 WAF=31292.166
+submitted=577 max_latency_ms=9553.440 free=3 gc=874 nand_writes=18055639 WAF=31292.269
+submitted=641 max_latency_ms=9553.440 free=3 gc=994 nand_writes=20040882 WAF=31265.027
+submitted=705 max_latency_ms=9553.440 free=3 gc=1113 nand_writes=22010865 WAF=31221.085
+submitted=769 max_latency_ms=9553.440 free=3 gc=1173 nand_writes=23882299 WAF=31056.306
+submitted=833 max_latency_ms=9553.440 free=3 gc=1298 nand_writes=25950778 WAF=31153.395
+submitted=897 max_latency_ms=9553.440 free=3 gc=1364 nand_writes=27986368 WAF=31199.964
+submitted=961 max_latency_ms=9553.440 free=3 gc=1486 nand_writes=30004443 WAF=31222.105
+submitted=1025 max_latency_ms=9553.440 free=3 gc=1604 nand_writes=31941595 WAF=31162.532
+submitted=1089 max_latency_ms=9553.440 free=3 gc=1726 nand_writes=33944411 WAF=31170.258
+submitted=1153 max_latency_ms=9553.440 free=3 gc=1845 nand_writes=35914394 WAF=31148.650
+submitted=1217 max_latency_ms=9553.440 free=3 gc=1909 nand_writes=37932411 WAF=31168.785
+submitted=1281 max_latency_ms=9553.440 free=3 gc=1975 nand_writes=39968001 WAF=31200.625
+submitted=1345 max_latency_ms=9553.440 free=3 gc=2093 nand_writes=41905153 WAF=31156.248
+submitted=1409 max_latency_ms=9553.440 free=3 gc=2215 nand_writes=43907969 WAF=31162.505
+submitted=1473 max_latency_ms=9553.440 free=3 gc=2335 nand_writes=45877953 WAF=31145.929
+submitted=1537 max_latency_ms=9553.440 free=3 gc=2457 nand_writes=47896028 WAF=31162.022
+submitted=1601 max_latency_ms=9553.440 free=3 gc=2577 nand_writes=49866012 WAF=31146.791
+submitted=1665 max_latency_ms=9553.440 free=3 gc=2698 nand_writes=51868827 WAF=31152.449
+submitted=1729 max_latency_ms=9553.440 free=3 gc=2761 nand_writes=53805924 WAF=31119.678
+submitted=1793 max_latency_ms=9553.440 free=3 gc=2886 nand_writes=55889662 WAF=31171.033
+submitted=1857 max_latency_ms=9553.440 free=3 gc=2948 nand_writes=57859588 WAF=31157.560
+submitted=1921 max_latency_ms=9553.440 free=3 gc=3071 nand_writes=59895235 WAF=31179.196
+submitted=1985 max_latency_ms=9553.440 free=3 gc=3131 nand_writes=61832329 WAF=31149.788
+submitted=2049 max_latency_ms=9553.440 free=3 gc=3255 nand_writes=63883236 WAF=31177.763
+submitted=2113 max_latency_ms=9553.440 free=3 gc=3373 nand_writes=65820388 WAF=31150.207
+submitted=2177 max_latency_ms=9553.440 free=3 gc=3494 nand_writes=67823203 WAF=31154.434
+submitted=2241 max_latency_ms=9553.440 free=3 gc=3560 nand_writes=69825963 WAF=31158.395
+submitted=2305 max_latency_ms=9553.440 free=3 gc=3685 nand_writes=71894442 WAF=31190.647
+submitted=2369 max_latency_ms=9553.440 free=3 gc=3747 nand_writes=73879627 WAF=31185.997
+submitted=2433 max_latency_ms=9553.440 free=3 gc=3869 nand_writes=75882443 WAF=31188.838
+submitted=2497 max_latency_ms=9553.440 free=3 gc=3993 nand_writes=77918091 WAF=31204.682
+submitted=2561 max_latency_ms=9553.440 free=3 gc=4113 nand_writes=79888075 WAF=31194.094
+submitted=2625 max_latency_ms=9553.440 free=3 gc=4233 nand_writes=81873318 WAF=31189.835
+submitted=2689 max_latency_ms=9553.440 free=3 gc=4350 nand_writes=83810469 WAF=31167.895
+submitted=2753 max_latency_ms=9553.440 free=3 gc=4415 nand_writes=85780398 WAF=31158.880
+submitted=2817 max_latency_ms=9553.440 free=3 gc=4533 nand_writes=87717550 WAF=31138.640
+submitted=2881 max_latency_ms=9553.440 free=3 gc=4660 nand_writes=89818861 WAF=31176.279
+submitted=2945 max_latency_ms=9553.440 free=3 gc=4722 nand_writes=91804046 WAF=31172.851
+submitted=3009 max_latency_ms=9553.440 free=3 gc=4842 nand_writes=93774030 WAF=31164.516
+submitted=3073 max_latency_ms=9553.440 free=3 gc=4965 nand_writes=95809677 WAF=31177.897
+submitted=3137 max_latency_ms=9553.440 free=3 gc=5029 nand_writes=97812435 WAF=31180.247
+submitted=3201 max_latency_ms=9553.440 free=3 gc=5153 nand_writes=99863342 WAF=31197.545
+submitted=3265 max_latency_ms=9553.440 free=3 gc=5269 nand_writes=101767662 WAF=31169.269
+submitted=3329 max_latency_ms=9553.440 free=3 gc=5391 nand_writes=103770478 WAF=31171.667
+submitted=3393 max_latency_ms=9553.440 free=3 gc=5511 nand_writes=105740462 WAF=31164.298
+submitted=3457 max_latency_ms=9553.440 free=3 gc=5634 nand_writes=107776109 WAF=31176.196
+submitted=3521 max_latency_ms=9553.440 free=3 gc=5699 nand_writes=109794127 WAF=31182.655
+submitted=3585 max_latency_ms=9553.440 free=3 gc=5817 nand_writes=111731279 WAF=31166.326
+submitted=3649 max_latency_ms=9553.440 free=3 gc=5935 nand_writes=113668431 WAF=31150.570
+submitted=3713 max_latency_ms=9553.440 free=3 gc=6056 nand_writes=115671246 WAF=31153.042
+submitted=3777 max_latency_ms=9553.440 free=3 gc=6124 nand_writes=117722097 WAF=31168.149
+submitted=3841 max_latency_ms=9553.440 free=3 gc=6186 nand_writes=119692023 WAF=31161.683
+submitted=3905 max_latency_ms=9553.440 free=3 gc=6309 nand_writes=121727670 WAF=31172.259
+submitted=3969 max_latency_ms=9553.440 free=3 gc=6372 nand_writes=123664767 WAF=31157.664
+submitted=4033 max_latency_ms=9553.440 free=3 gc=6496 nand_writes=125700415 WAF=31167.968
+PASS concurrent virtual-time consistency; see maximum latency above

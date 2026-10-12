@@ -1,0 +1,21 @@
+{
+  "status": "passed",
+  "sanitizers": true,
+  "seed": 20261011,
+  "sanitizer_set": [
+    "address",
+    "undefined",
+    "float-cast-overflow"
+  ],
+  "geometry": "See harness: 4ch/4lun/64pg/4KiB, block count and CMT set by harness macros",
+  "binary_sha256": "4edf66d02862f8ed82d1093fec9e23d5b324db8c4d94bcdfd69c12004e521c34",
+  "sources": {
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/native_multigroup_test.c": "b0c308a6c418716a514499a7c5c3f2b09f0f05d0570612a3f99b9d08524393e7",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/native_gc_test.c": "af95d9c877c225438feeb7df7057275434f15dcaa52706865da675404a7e70c0",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/ld-tpftl.c": "3e3b059bc0e0fc92bbd84b315bf6331511c17fabc1c053dc96349a6a3ecc532d",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/ld-tpftl.h": "a6f0c1fa31f96bbb219869bfdcc225330707ecb63c5541eb5c321ddf82475e44",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/util.c": "067b43c76264d50b6ebc932a16cb9819297befbf5763f8bf3f64279938e58d07",
+    "/home/zheng/桌面/代码/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/lib/pqueue.c": "705ac2ec9ce03df90b1e660d5a449acf19f74736c19be9b061aeed2b22526102",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/run_native_gc.py": "3b404b27a7aac2b0b41777a7f9f10e8973b602bfcc9831bf3f118677475e05ed"
+  }
+}

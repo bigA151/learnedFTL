@@ -1,16 +1,58 @@
 {
   "goal": "逐项补全 ld-tpftl 并复现论文机制和性能",
   "status": "active",
-  "correctness": "Current source passed complete ASan/UBSan regression (including near-capacity and pressure borrowing) and current-binary FEMU CRC/GC/model-path smoke.",
-  "paper_run": "Full corrected-source sequential write failed during run2: insufficient paired-GC reserve; raw failure preserved.",
+  "correctness": "GC immutable per-page read-completion fix merged (C 77957498 / binary 711fb418). Complete sanitizer regression, 256-group/64-job partial-write test, full-geometry 64-outstanding timeline all pass. Maximum virtual latency 180625.8ms -> 9547.8ms, GC/program counts identical at 64 checkpoints. Targeted full-geometry random preflight also passed sanitizers/invariants; max9553.44ms<30s.",
+  "paper_run": "45 current-revision formal windows validated:30fresh-write and15sequential-read windows;15post-read sequential-write supplemental windows complete. Random-read prewarm interrupted, no formal random reads completed.",
   "remaining": [
-    "Repair global reserve exhaustion with active borrowing pairs and validate native/full-size regressions",
-    "Complete Fig14 four FIO patterns across all five FTLs, three measurement windows per case",
-    "Generate Fig14-style throughput, hit-ratio and WAF plots from validated raw data",
-    "Push final code changes after reproduction"
+    "Complete Fig14 sequential/random reads across five FTLs, three windows after six-pass matching prewarm",
+    "Collect three separately labeled post-read write windows for each read case to assess preconditioned GC/WAF",
+    "Generate and visually verify both fresh-write and prewarmed-write Fig14-style figures plus raw/aggregate CSV and Chinese report",
+    "Push final code/data/figures to confirmed bigA151/learnedFTL codex/ftl-reproduction-1 and verify remote SHA"
   ],
-  "baselines": "All four basic CRC/GC smokes passed; LeaFTL source defects repaired and smoke revalidated.",
-  "new_issue": "Reproduced full-size failure with 64 interleaved writers after a partial first pass; global free-line reserve reaches zero while pairs remain active. Repair in progress.",
-  "current_smoke": "vm-smoke-learnedftl-20261011T155426Z: passed",
-  "push_policy": "Push current snapshot now; after full Fig14 reproduction, push code changes again and publish measured plots/data."
+  "baselines": "All four baselines passed CRC/GC smoke; LeaFTL wrap, invalid-prediction fallback, read-multiplicity and 50000 random-overwrite native checks pass. Random fixture uses documented native-only four-line reserve.",
+  "new_issue": "Artificial GC dependency chain fixed in FTL. Original SDK NVMe queue reset handling remains unproven; default effective queue timeout stays30s in both formal and supplemental measurements. Effective600s used only in excluded diagnostics.",
+  "current_smoke": "reproduction/vm-smoke-learnedftl-20261012T044559Z: passed six actual namespace writes/CRC reads, 30 DATA lines GC, model/cache/fallback reads",
+  "push_policy": "Push current snapshot now; after full Fig14 reproduction, push code changes again and publish measured plots/data.",
+  "push": {
+    "repository": "bigA151/learnedFTL",
+    "branch": "codex/ftl-reproduction-1",
+    "current_snapshot_commit": "4d4a938",
+    "status": "pushed",
+    "final_push": "Required if code changes after full reproduction; user explicitly confirmed this destination.",
+    "intermediate_push": "User requested another push now; prepare current code and verification snapshot. Full results/final plots remain pending and will require a later push."
+  },
+  "operational_notes": "Original live session95929 is missing and authoritative host process scan confirms matrix runner and VM absent. Preserve interrupted random-prewarm case as diagnostic; after user-requested intermediate push, resume only missing random-read combinations in fresh VMs.",
+  "delivery_preparation": "Local publication checkout contains current code, repair scripts, original backups and native evidence. Cumulative LearnedFTL patch regenerated with correct EOF markers; all three patch applications reproduce exact current source bytes (patch-verification.json). No new commit/push yet; final measured data/figures pending. Exporter export_fig14_evidence.py prepared for the complete 40-case raw evidence archive with SHA-256 index; excludes binaries, VM images and keys. Raw checks now also verify runner hash, exact job regions/runtime, page counts and QEMU snapshot ordering; all 30 current formal writes pass.",
+  "latest_live_observation": {
+    "status": "interrupted_process_missing",
+    "case": "paper-learnedftl-randread-20261012T075230Z",
+    "checked_utc": "2026-10-12T11:29:04.305740+00:00",
+    "formal_valid_windows": 45,
+    "cause": "unknown"
+  },
+  "report_preparation": "Report generator now distinguishes current GC dependency regression/multigroup/full-geometry evidence from historical native-current-float-check evidence; copied to publication checkout.",
+  "archive_verification": "verify_fig14_export.py prepared and syntax checked; run on final exported40-case archive before publication. It checks file hashes, complete60+30 coverage and same binary per variant; does not replace original local measurement validation.",
+  "previous_goal_turn_classification": "Verified wait: live session95929, sequential six-pass prewarm advancing.",
+  "current_goal_turn_classification": "Verified wait: four50s polls confirm live95929; DFTL six-pass prewarm exceeds four logical capacities, advances with zero sampled swap.",
+  "learnedftl_sequential_read_result": {
+    "case": "paper-learnedftl-read-20261012T050313Z",
+    "prewarm_bytes": 192002654208,
+    "prewarm_runtime_s": 1971.314,
+    "formal_read_mean_MB_s": 1827.3896244011466,
+    "formal_read_sample_SD_MB_s": 11.031573395609463,
+    "supplemental_write_MB_s": [
+      0.033201003986416656,
+      0.03528473527626885,
+      0.03376721921815442
+    ],
+    "supplemental_write_WAF": [
+      28727.09471766849,
+      27217.568728522336,
+      28238.965949820788
+    ],
+    "all_fio_errors_zero": true,
+    "queue_timeout_seconds": 30,
+    "note": "Extremely high supplemental WAF retained; untrained-donor rule and64disjoint-region layout are mechanism-based possible explanation, not a controlled causal proof."
+  },
+  "figure_preparation": "Supplement WAF>100 uses labeled logarithmic axis and provenance captures scale/limits/summary+plotter hashes. One completed actual case used for INCOMPLETE preview; final full figure still requires all60rows and new visual QA."
 }

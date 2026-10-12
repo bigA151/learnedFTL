@@ -1,0 +1,9 @@
+PASS LeaFTL physical-line wrap has finite, bounded predictions
+compact
+compact delete cnt: 0
+Native-only GC reserve: 4 lines
+PASS LeaFTL read multiplicity equals actual NAND read energy count
+PASS LeaFTL six 512KiB write passes: physical mapping/rmap/TP0/GC program counts
+PASS LeaFTL 50000 random overwrites, buffer drain and all-LPN reads
+PASS LeaFTL invalid cached prediction loads TP then data, with two NAND reads
+PASS LeaFTL singleton/final-sample/boundary/CRB/interval insertion/compaction mappings

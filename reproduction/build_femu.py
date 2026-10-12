@@ -13,6 +13,7 @@ import subprocess
 
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE.parent / 'learnedFTL-codex-learnedftl-chinese-comments'
+if not SOURCE.exists(): SOURCE = HERE.parent  # published FEMU subtree layout
 SDK = Path(os.environ.get('FEMU_ROOT', '/home/zheng/FEMU-ext4'))
 BUILD = SDK / 'reproduction/upstream/build-femu'
 ENV = [str(SDK / 'femu-local-env.sh')]

@@ -1,12 +1,12 @@
 {
   "status": "passed",
-  "paper_binary_sha256": "8b376c1c75aaed8c93d19ddf7d640bc516e44f767c00befa47dde53c9f6dd412",
-  "diagnostic_binary_sha256": "1f2a7c4f6c209670ef57edf7765be258ce9fcd89d70e6553529831679e22fd1f",
+  "paper_binary_sha256": "4e0bc30d7c50fb974aa9fbe77a103aa5eb67ae7fd4a415ae9cc0d0a783cc4c25",
+  "diagnostic_binary_sha256": "32f874d672d4cbf7c57c2aa876ff8634476633fdc9e49ba5e6a76c0ba2050a3d",
   "only_geometry_differs": true,
   "exit_code": 0,
   "scope": "96 MiB namespace, six actual CRC-verified write passes, random read and GC counter",
   "limitations": "Logical payload backend; baseline internals not exhaustively checked.",
-  "run_directory": "/home/zheng/桌面/代码/learnedFTL/reproduction/vm-smoke-leaftl-20261011T161012Z",
+  "run_directory": "/home/zheng/桌面/代码/learnedFTL/reproduction/vm-smoke-leaftl-20261012T030346Z",
   "method": {
     "purpose": "correctness smoke; not paper performance",
     "acceleration": "kvm",
@@ -15,22 +15,22 @@
     "physical_geometry": "4ch/4lun/32blk/64pg/4KiB",
     "build": {
       "variant": "leaftl",
-      "binary": "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/qemu-leaftl-1f2a7c4f6c209670",
+      "binary": "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/qemu-leaftl-32f874d672d4cbf7",
       "base_build": "/home/zheng/FEMU-ext4/reproduction/upstream/build-femu",
-      "sha256": "1f2a7c4f6c209670ef57edf7765be258ce9fcd89d70e6553529831679e22fd1f",
+      "sha256": "32f874d672d4cbf7c57c2aa876ff8634476633fdc9e49ba5e6a76c0ba2050a3d",
       "sources": {
-        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.c": "a3fc93812d75f62304d508b437cc1511bc3f0470af391d76eff80da6873d0a96",
-        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.h": "07d78b5a6508aefa17b2a56a1ada9e1fdba16e2a22377717c981a2fbeecc7eb5",
-        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/bb.c": "ccb7291c10af3f77f2a588c928de3aa9cc37794fea55f482d20376cdc7b232fc",
+        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.c": "609e0a9f90fe5a8ad59843ceef6ec524b62b9e1f6bf38551994f99cb1f0d5db9",
+        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.h": "44cdd5ee812f8f18f3421d20676780142f22f94b2bb5ec3cafd4c6992fe95d44",
+        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/bb.c": "3d83d18c8bb0e0827060ca30ac989c389032cee232498cbcbf5c1a637fd9f63b",
         "/home/zheng/FEMU-ext4/reproduction/build_paper.py": "d64a53bbd68a73a7966f9b7aa679203797650430625414825a59d2d7a4015b10",
-        "/home/zheng/桌面/代码/learnedFTL/reproduction/build_baselines.py": "50ce6b45fe7625a6eb8820ded71afa5226d04c6e997e93f0f0d5d8de8e534b74",
-        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/mechanism-repairs.patch": "7786481c5e9ad347ac941ad99afe1244668bea5ddc4140ec1a837bf5f7258cea",
-        "/home/zheng/桌面/代码/learnedFTL/reproduction/repair_leaftl.py": "a4a153791944b11093b1d514b2dce8c8647e51d432a830add0d3b8934af1e647"
+        "/home/zheng/桌面/代码/learnedFTL/reproduction/build_baselines.py": "0a496d69e0fdddee14d81bc2dbde3c2eea7a8c47c3c9940e0e7f3966caa7fe39",
+        "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/mechanism-repairs.patch": "a6edf8c72d71761aee02be3635723306d3beccd396a122830bae75efc9db2591",
+        "/home/zheng/桌面/代码/learnedFTL/reproduction/repair_leaftl.py": "22df5e88bcc0c56bd4024b9af02aead9a6a465b5684724f06aa400f6a2cd7f9a"
       },
       "notes": "Existing parameter/minimal diagnostic corrections; baseline mechanisms require separate validation.",
       "physical_bytes": 134217728,
       "geometry": "4ch/4lun/32blk/64pg/4KiB",
-      "paper_binary_sha256": "8b376c1c75aaed8c93d19ddf7d640bc516e44f767c00befa47dde53c9f6dd412",
+      "paper_binary_sha256": "4e0bc30d7c50fb974aa9fbe77a103aa5eb67ae7fd4a415ae9cc0d0a783cc4c25",
       "diagnostic_only": true,
       "geometry_overrides": [
         "nchs",
@@ -41,16 +41,19 @@
     },
     "status": "passed",
     "metrics": {
-      "access": "177824",
-      "cmt_hit": "175066",
+      "access": "177820",
+      "cmt_hit": "175057",
       "cmt_miss": "0",
       "model_hit": "0",
       "model_use": "0",
       "gc": "114",
       "writes": "148032",
-      "read_energy": "1140765.500",
+      "read_energy": "1140706.000",
       "write_energy": "2472134.400",
-      "erase_energy": "240768.000"
+      "erase_energy": "240768.000",
+      "single_read": "24870",
+      "double_read": "150283",
+      "triple_read": "0"
     }
   }
 }

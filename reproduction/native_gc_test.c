@@ -18,7 +18,18 @@ static void init_test(struct ssd *s)
 {
     struct ssdparams *p = &s->sp;
     ssd_init_params(p);
-    p->nchs = 4; p->luns_per_ch = 4; p->pgs_per_blk = 64;
+#ifndef NATIVE_TEST_CHANNELS
+#define NATIVE_TEST_CHANNELS 4
+#endif
+#ifndef NATIVE_TEST_LUNS
+#define NATIVE_TEST_LUNS 4
+#endif
+#ifndef NATIVE_TEST_PAGES
+#define NATIVE_TEST_PAGES 64
+#endif
+    p->nchs = NATIVE_TEST_CHANNELS;
+    p->luns_per_ch = NATIVE_TEST_LUNS;
+    p->pgs_per_blk = NATIVE_TEST_PAGES;
 #ifndef NATIVE_TEST_BLOCKS
 #define NATIVE_TEST_BLOCKS 32
 #endif

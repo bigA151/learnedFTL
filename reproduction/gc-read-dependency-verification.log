@@ -1,0 +1,19 @@
+{
+  "status": "passed",
+  "before_max_virtual_latency_ms": 180625.8,
+  "after_max_virtual_latency_ms": 9547.8,
+  "identical_common_checkpoints": 64,
+  "checks": "Same full-geometry fixture, six prewarm passes, sanitizers and all source snapshots verified; GC/free-line/NAND-write/WAF counters identical at 64 checkpoints. Virtual queued latency crosses below 30s. Not a throughput measurement.",
+  "logs": [
+    {
+      "path": "evidence/current-native/native-parallel-gc-full-continued/native-results.log",
+      "sha256": "b9b4474fb3c53fd905c4e2edf821ac0c4afe773141adace6e795f625ced2caca"
+    },
+    {
+      "path": "evidence/current-native/native-parallel-gc-fixed/native-results.log",
+      "sha256": "c697bdbc87f25278929cc6faa565adaf05d77ab0425f204b3be6443e0a8aeb1e"
+    }
+  ],
+  "before_source_sha256": "3e3b059bc0e0fc92bbd84b315bf6331511c17fabc1c053dc96349a6a3ecc532d",
+  "after_source_sha256": "77957498e621f5d7ef0c53b1b6252f77924aa71f6d5c3b009ada72a6f5461d7f"
+}

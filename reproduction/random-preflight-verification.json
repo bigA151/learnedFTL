@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "scope": "Targeted native random timing/consistency regression; not formal six-pass prewarm or throughput data",
+  "geometry": "8ch/8lun/512pg/256blocks/4KiB",
+  "full_occupancy_passes": 1,
+  "random_chunk_overwrites": 1024,
+  "chunk_bytes": 524288,
+  "random_page_submissions": 4096,
+  "concurrent_requests": 64,
+  "max_virtual_latency_ms": 9553.44,
+  "source_sha256": "77957498e621f5d7ef0c53b1b6252f77924aa71f6d5c3b009ada72a6f5461d7f"
+}

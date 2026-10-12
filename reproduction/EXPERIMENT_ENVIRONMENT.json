@@ -1,0 +1,18 @@
+{
+  "host_cpu_model": "12th Gen Intel(R) Core(TM) i7-12700",
+  "host_logical_cpus": 20,
+  "host_memory_kib": 47719408,
+  "host_kernel": "7.0.0-38-generic",
+  "sdk": "QEMU7/FEMU author build, read-only objects linked to workspace FTLs",
+  "guest": "Ubuntu focal cloud image, 4 vCPU, 2GiB RAM",
+  "fio": "4KiB direct psync,64 jobs,60s",
+  "read_prewarm": "6 logical-size passes of matching 512KiB write; random-map enabled",
+  "write_repeat_state": "Fresh independent VM for each repeat; no prewarm",
+  "read_repeat_state": "Three windows on the unchanged prewarmed VM",
+  "notes": "NAND delays and exact physical/logical capacities are in per-run method.json. Host memory backend is not mlocked; observed swap is logged per stage.",
+  "supplemental_writes": "After formal read windows and optional shared-range probe, collect three matching 60s consecutive write windows on each prewarmed device. Separate cohort/figure; do not replace independent fresh-write rows or assume steady state.",
+  "read_prewarm_time_limit_seconds": 86400,
+  "effective_nvme_queue_timeout_seconds": 30,
+  "supplemental_actual_runtime": "Configured60s; FIO drains in-flight requests. Actual runtime and maximum I/O latency are retained per window.",
+  "gc_timeline_verification": "verify_gc_read_dependencies.py validates full-geometry before/after source snapshots and counters. Extended600s queue timeouts exist only in excluded crash diagnostics."
+}

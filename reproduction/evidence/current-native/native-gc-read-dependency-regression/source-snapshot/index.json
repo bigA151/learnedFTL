@@ -1,0 +1,26 @@
+{
+  "/home/zheng/\u684c\u9762/\u4ee3\u7801/learnedFTL/reproduction/native_gc_test.c": {
+    "snapshot": "0-native_gc_test.c",
+    "sha256": "4d4843abb72e3c424edc7bf979f7d86f5b51ea9cf106a30ad38f52d14b077415"
+  },
+  "/home/zheng/\u684c\u9762/\u4ee3\u7801/learnedFTL/reproduction/candidate-gc-read-dependency/femu/bbssd/ld-tpftl.c": {
+    "snapshot": "1-ld-tpftl.c",
+    "sha256": "77957498e621f5d7ef0c53b1b6252f77924aa71f6d5c3b009ada72a6f5461d7f"
+  },
+  "/home/zheng/\u684c\u9762/\u4ee3\u7801/learnedFTL/reproduction/candidate-gc-read-dependency/femu/bbssd/ld-tpftl.h": {
+    "snapshot": "2-ld-tpftl.h",
+    "sha256": "a6f0c1fa31f96bbb219869bfdcc225330707ecb63c5541eb5c321ddf82475e44"
+  },
+  "/home/zheng/\u684c\u9762/\u4ee3\u7801/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/bbssd/util.c": {
+    "snapshot": "3-util.c",
+    "sha256": "067b43c76264d50b6ebc932a16cb9819297befbf5763f8bf3f64279938e58d07"
+  },
+  "/home/zheng/\u684c\u9762/\u4ee3\u7801/learnedFTL/learnedFTL-codex-learnedftl-chinese-comments/lib/pqueue.c": {
+    "snapshot": "4-pqueue.c",
+    "sha256": "705ac2ec9ce03df90b1e660d5a449acf19f74736c19be9b061aeed2b22526102"
+  },
+  "/home/zheng/\u684c\u9762/\u4ee3\u7801/learnedFTL/reproduction/run_native_gc.py": {
+    "snapshot": "5-run_native_gc.py",
+    "sha256": "e2039ce733748807d647c1be5afe6942a8d29ce41eac60c64a9f84dfc208bbb6"
+  }
+}

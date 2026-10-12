@@ -1,0 +1,16 @@
+{
+  "status": "failed",
+  "sanitizers": true,
+  "seed": 20261012,
+  "geometry": "See harness: 4ch/4lun/64pg/4KiB, block count and CMT set by harness macros",
+  "binary_sha256": "67e75a8437c8ff9cf5ca2c0cbb71707d931a690ad3de894157d5e5ef764cb1a0",
+  "sources": {
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/native_leaftl_test.c": "d81038689f214ba1def504e618ffa200c8ad6f28ef96302e442b64185df71c85",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/native_gc_test.c": "af95d9c877c225438feeb7df7057275434f15dcaa52706865da675404a7e70c0",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.c": "659bfc9f42b0ebaa97849b4fe4f150233072eab685d3014c58d2511b9edd144b",
+    "/home/zheng/桌面/代码/learnedFTL/reproduction/variants-diagnostic/leaftl/femu/bbssd/leaftl.h": "44cdd5ee812f8f18f3421d20676780142f22f94b2bb5ec3cafd4c6992fe95d44"
+  },
+  "manifest_corrections": [
+    "Native LeaFTL random-overwrite seed is 20261012 in the harness; previous generic runner metadata said 20261011. Earlier tests without random overwrites do not use this seed."
+  ]
+}

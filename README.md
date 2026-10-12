@@ -12,9 +12,25 @@ cache consistency, and NAND dependency accounting.
 `reproduction/` contains the mechanism audit, native invariant tests, FEMU
 CRC/GC smoke runner, paper workload runner, and baseline source repair patch.
 See `reproduction/reproduction-state.json` for the current verification status.
-The full Fig. 14 comparison is still in progress. A full-size sequential-write
-run exposed a reserve-exhaustion bug that remains under investigation in this
-snapshot; this commit must not be described as a completed reproduction.
+The full Fig. 14 comparison is still in progress. 45 formal measurement
+windows have passed raw-result validation: all 30 fresh-write windows and
+all 15 sequential-read windows. Fifteen separately labeled post-read
+sequential-write windows are also complete. Random-read combinations remain
+unfinished; an interrupted prewarm has been excluded and will be restarted
+in a fresh VM. Each read case requires six full logical-size matching prewarm
+passes before three formal measurements. Supplemental post-read writes do
+not replace the fresh-write cohort.
+
+The GC reserve exhaustion fix passed capacity-pressure regressions. A later
+GC timing fix stores each page's source-read completion time, avoiding
+artificial dependencies on subsequent destination writes. The full-geometry
+64-request regression retained identical GC/program counts and reduced the
+maximum virtual queued latency from 180.63 s to 9.55 s. Native invariant and
+sanitizer regressions, a dense random preflight and FEMU CRC/GC smoke pass.
+See `reproduction/README.zh-CN.md` for the current workflow and
+`reproduction/verify_gc_read_dependencies.py` for the saved evidence check.
+Measured figures and the final report remain pending the complete read
+matrix; this is not yet a completed performance reproduction.
 
 The workspace retains the raw VM results and immutable binary/source snapshots.
 VM images, SSH keys, binaries and dependency caches are excluded from Git.

@@ -1,0 +1,10 @@
+total pages: 256
+PASS cold-tail borrowing and paired GC
+PASS insufficient GC budget leaves state and NAND counters unchanged
+PASS native random overwrite: 50000 writes, GC lines=52
+PASS 1024 sequential 512 KiB write/read requests across TP/line boundaries
+PASS partial current data and translation line GC
+total pages: 256
+PASS near-capacity mixed overwrite: 28/32 groups, 70000 random writes, six sequential passes, min free=3, GC lines=242032
+total pages: 256
+PASS cold-tail borrowing with three free lines, concurrent donor appends, donor-initiated paired GC

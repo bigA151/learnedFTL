@@ -1,0 +1,35 @@
+{
+  "status": "passed",
+  "scope": "Patches apply to saved originals and reproduce exact current C/H/BB bytes",
+  "checks": [
+    {
+      "name": "LearnedFTL cumulative",
+      "status": "passed",
+      "patch_sha256": "4792da2688a128a213062cfc072260ec2cc7395573d77cc2fd834b8f98df6fbc",
+      "result_sha256": {
+        "ld-tpftl.c": "77957498e621f5d7ef0c53b1b6252f77924aa71f6d5c3b009ada72a6f5461d7f",
+        "ld-tpftl.h": "a6f0c1fa31f96bbb219869bfdcc225330707ecb63c5541eb5c321ddf82475e44"
+      }
+    },
+    {
+      "name": "variants LeaFTL repair",
+      "status": "passed",
+      "patch_sha256": "a6edf8c72d71761aee02be3635723306d3beccd396a122830bae75efc9db2591",
+      "result_sha256": {
+        "leaftl.c": "2cefdfbd492ae8701202300f86e1a529a57bcc1c69350e708ecebf782bf08058",
+        "leaftl.h": "44cdd5ee812f8f18f3421d20676780142f22f94b2bb5ec3cafd4c6992fe95d44",
+        "bb.c": "3d83d18c8bb0e0827060ca30ac989c389032cee232498cbcbf5c1a637fd9f63b"
+      }
+    },
+    {
+      "name": "variants-diagnostic LeaFTL repair",
+      "status": "passed",
+      "patch_sha256": "a6edf8c72d71761aee02be3635723306d3beccd396a122830bae75efc9db2591",
+      "result_sha256": {
+        "leaftl.c": "609e0a9f90fe5a8ad59843ceef6ec524b62b9e1f6bf38551994f99cb1f0d5db9",
+        "leaftl.h": "44cdd5ee812f8f18f3421d20676780142f22f94b2bb5ec3cafd4c6992fe95d44",
+        "bb.c": "3d83d18c8bb0e0827060ca30ac989c389032cee232498cbcbf5c1a637fd9f63b"
+      }
+    }
+  ]
+}
